@@ -43,7 +43,9 @@ services:
       TRACCAR_INSTANCE: rally-local-traccar
     depends_on:
       rally:
-        condition: service_healthy
+        # The local Rally service does not define a Compose healthcheck.
+        # The connector retries transient API failures on its next poll.
+        condition: service_started
       traccar:
         condition: service_started
     read_only: true
