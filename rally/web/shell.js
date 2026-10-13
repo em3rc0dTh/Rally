@@ -230,6 +230,68 @@
     <button type="button" id="erp-load-state">↻ Load approved ERP states</button>
     <div id="erp-live-result" aria-live="polite"><div class="shell-empty">No ERP query made yet. The source requires a valid Odoo instance, dedicated credential, model/company grant and explicit selector.</div></div>`;
   integrations.append(integrationCards,setupGuides,erpDomains,erpLive,panels.connectorsHead,panels.connectors);
+  const grantPanel=el('section','panel erp-grants-panel');
+  grantPanel.innerHTML=`<h2>Odoo Enterprise · Explicit model authorization</h2>
+    <p>Before any provider import, a tenant administrator must authorize each model for each company and a dedicated <code>odoo_enterprise</code> identity. No provider token is entered in the browser.</p>
+    <button type="button" id="erp-grant-load">↻ Load Enterprise connectors</button>
+    <form id="erp-grant-form" class="erp-rule-form">
+      <label>Enterprise connector<select name="credential_id" id="erp-grant-identity" required>
+        <option value="">Load authorized identities first</option></select></label>
+      <label>Odoo company ID<input name="company_id" type="number" min="1" step="1" required></label>
+      <label>Allowed model<select name="model" required>
+        <option value="purchase.order">Purchase order</option>
+        <option value="stock.picking">Stock picking</option>
+        <option value="sale.order">Sale order</option>
+        <option value="crm.lead">CRM opportunity</option>
+        <option value="hr.employee">Employee</option>
+        <option value="hr.attendance">Attendance</option>
+        <option value="hr.leave">Leave</option>
+        <option value="hr.payslip">Payslip</option>
+        <option value="hr.expense">Expense</option>
+        <option value="account.move">Accounting move</option>
+        <option value="account.payment">Payment</option>
+      </select></label>
+      <button type="submit">Authorize model/company</button>
+    </form><p id="erp-grant-message" role="status" aria-live="polite">No grants created from this screen.</p>`;
+  integrations.append(grantPanel);
+  byId('erp-grant-load').onclick=async()=>{
+    const btn=byId('erp-grant-load'), select=byId('erp-grant-identity'), msg=byId('erp-grant-message');
+    if(typeof identity==='undefined'||!identity||identity.role!=='admin'){
+      msg.textContent='Tenant administrator access required.';return;
+    }
+    btn.disabled=true;
+    try{
+      const credentials=await api('credentials');
+      const approved=credentials.filter(c=>c.source==='odoo_enterprise'&&c.role==='connector'&&!c.revoked_at&&
+        (!c.expires_at||new Date(c.expires_at).getTime()>Date.now()));
+      select.replaceChildren();
+      const empty=document.createElement('option');empty.value='';empty.textContent='Select an Enterprise connector';select.append(empty);
+      approved.forEach(c=>{
+        const item=document.createElement('option');
+        item.value=c.id;item.textContent=c.name+' · '+c.scope;select.append(item);
+      });
+      msg.textContent=approved.length+' active enterprise connector identities available. Grant only models authorized in the source Odoo instance.';
+    }catch(error){msg.textContent='Failed to fetch credentials: '+error.message;}
+    finally{btn.disabled=false;}
+  };
+  byId('erp-grant-form').onsubmit=async(event)=>{
+    event.preventDefault();
+    const form=event.currentTarget, msg=byId('erp-grant-message');
+    if(typeof identity==='undefined'||!identity||identity.role!=='admin'){
+      msg.textContent='Tenant administrator access required.';return;
+    }
+    const data=new FormData(form), btn=form.querySelector('button[type="submit"]');
+    btn.disabled=true;msg.textContent='Saving explicit source scope…';
+    try{
+      const body={credential_id:String(data.get('credential_id')||''),
+        company_id:Number(data.get('company_id')),
+        models:[String(data.get('model'))]};
+      const response=await api('erp/grants','POST',body);
+      msg.textContent='Approved '+response.authorized.join(', ')+' for company '+response.company_id+
+        '. The provider connector still requires its own private API key and selectors.';
+    }catch(error){msg.textContent='Grant not created: '+error.message;}
+    finally{btn.disabled=false;}
+  };
   const rulePanel=el('section','panel erp-rule-panel');
   rulePanel.innerHTML=`<h2>ERP exception policy · admin only</h2>
     <p>Optional age-based state rule. A case is created only when a recently observed ERP record stays in your chosen state beyond the authorized threshold. This does not automatically certify a financial, payroll or field-work breach.</p>

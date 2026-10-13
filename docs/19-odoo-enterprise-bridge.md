@@ -102,3 +102,8 @@ The system has no policies by default. No tenant, employee or company is subject
 
 
 **Credential segregation:** legacy `source=odoo` can import selected sale-based work orders only. The new `source=odoo_enterprise` is required for state snapshots and cannot import jobs. Never reuse the old sales connector or Traccar token for the enterprise mirror.
+
+
+### Browser grant administration
+
+After issuing a credential in **Audit & access** with `source=odoo_enterprise` and a stable `scope`, go to **Integrations → Odoo Enterprise · Explicit model authorization**. Click **Load Enterprise connectors**, select the credential, enter the actual Odoo company ID and choose an allowed model. Only the tenant administrator can create grants. The dropdown shows credential names and IDs **without token secrets**. Grant authorization never starts sync or transmits credentials to Odoo. Model grants can be revoked using the authenticated DELETE API; revocation takes effect for new imports immediately.
