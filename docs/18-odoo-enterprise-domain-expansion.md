@@ -120,3 +120,8 @@ El repositorio Odoo contiene una credencial de API embebida en `OdooAttendance/s
 - `adapters/ingest_cli.py`: GPS Traccar real, asociado a activos; no demuestra asistencia ni trabajo completado.
 - `rally/app.py`: evidencias y excepciones del MVP; el contrato multi-dominio y los permisos Finanzas/RRHH **no existen aún**.
 - `rally/web/shell.js`: catálogo de extensión en Integrations, rotulado como plan/referencia, sin datos sintéticos ni falsa conexión.
+
+
+## 7. Implementation append — opt-in state bridge
+
+The next increment implements Odoo 19 JSON-2 **read-only state observations** for 11 explicit models, with tenant+instance+company+model grants, internal current snapshots and change history, and administrative state summaries in Integrations. It does **not** add executable exception rules, legal finance workflows, payroll calculation, payment execution, or broad ERP sync. See [activation guide](19-odoo-enterprise-bridge.md). The source must not be marked connected until an authorized customer Odoo API key is configured and live data actually arrives.

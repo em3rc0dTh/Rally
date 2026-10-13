@@ -224,7 +224,38 @@
       <article class="erp-domain"><span class="shell-label">Payments</span><h3>Collections and reconciliation</h3><p>Proposed cross-system status verification; payment execution remains out of scope.</p><span class="erp-domain-status">Proposed · not in reference adapter</span></article>
     </div>
     <p class="erp-domain-footnote">Source model, company restrictions, field availability, data retention and API edition must be validated for each customer's actual Odoo deployment. No HR or financial figures are displayed without authoritative integration.</p>`;
-  integrations.append(integrationCards,setupGuides,erpDomains,panels.connectorsHead,panels.connectors);
+  const erpLive = el('section','panel erp-live-panel');
+  erpLive.innerHTML=`<h2>Enterprise ERP state mirror</h2>
+    <p>Read-only, tenant-bound snapshots from explicitly authorized Odoo models. No salaries, invoice amounts, banking details or employee identity are displayed. <strong>Only tenant administrators can load this data.</strong></p>
+    <button type="button" id="erp-load-state">↻ Load approved ERP states</button>
+    <div id="erp-live-result" aria-live="polite"><div class="shell-empty">No ERP query made yet. The source requires a valid Odoo instance, dedicated credential, model/company grant and explicit selector.</div></div>`;
+  integrations.append(integrationCards,setupGuides,erpDomains,erpLive,panels.connectorsHead,panels.connectors);
+  byId('erp-load-state').onclick=async()=>{
+    const btn=byId('erp-load-state'), host=byId('erp-live-result');
+    if(typeof identity==='undefined'||!identity||identity.role!=='admin'){
+      host.textContent='Tenant administrator access required.';return;
+    }
+    btn.disabled=true;host.textContent='Loading authorized Odoo state records…';
+    try{
+      const [summary, grants] = await Promise.all([api('erp/summary'),api('erp/grants')]);
+      if(!Array.isArray(summary)||!Array.isArray(grants))throw new Error('Unexpected ERP response');
+      const grantCount=grants.length;
+      if(!summary.length){
+        host.innerHTML='<div class="shell-empty">No Odoo enterprise records imported yet. Approved model/company grants: '
+          +grantCount+'. Configure the connector privately on the deployment host. No source data is fabricated.</div>';
+      }else{
+        const count=summary.reduce((n,r)=>n+Number(r.records||0),0);
+        host.innerHTML='<p class="erp-live-count">'+count+' mirrored ERP record'+(count===1?'':'s')+
+          ' · '+summary.length+' state group'+(summary.length===1?'':'s')+
+          ' · '+grantCount+' approved model/company grant'+(grantCount===1?'':'s')+'</p>'+
+          '<div class="erp-live-scroll"><table><thead><tr><th>Instance</th><th>Company ID</th><th>Model</th><th>State</th><th>Records</th><th>Last seen</th></tr></thead><tbody>'+
+          summary.map(r=>'<tr><td>'+safe(r.instance)+'</td><td>'+safe(r.company_id)+'</td><td>'+safe(r.model)+
+          '</td><td>'+safe(r.state)+'</td><td>'+safe(r.records)+'</td><td>'+safe(asLocal(r.last_seen))+'</td></tr>').join('')+
+          '</tbody></table></div>';
+      }
+    }catch(error){host.textContent='ERP data unavailable: '+error.message;}
+    finally{btn.disabled=false;}
+  };
   const governance=makePage('governance','Audit & access','Review the chain of accountability and manage individual access permissions.');
   governance.append(panels.auditHead,panels.audit,panels.access);
   // The native <dialog> must not be inside a hidden screen.
