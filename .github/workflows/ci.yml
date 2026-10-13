@@ -28,9 +28,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install application and validation dependencies
-        run: python -m pip install -e '.[test]'
+        run: python -m pip install -e '.[test,temporal]'
       - name: Compile Python
         run: python -m compileall -q rally adapters workflows tests
+      - name: Check cockpit JavaScript syntax
+        run: node --check rally/web/app.js
       - name: Run SQLite and disposable PostgreSQL integration tests
         run: python -m pytest -q
       - name: Verify production configuration rejects placeholders
