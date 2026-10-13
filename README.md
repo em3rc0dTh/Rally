@@ -4,6 +4,11 @@
 
 Rally links work-order intent to equipment custody, immutable-by-API observations and recoverable operational exceptions. The executable scope is equipment custody and work-order assurance. GPS/RFID/QR observations never automatically authorize custody or certify completed work.
 
+## Mission Control 0.3 — modular UI
+A redesigned left-navigation workspace now separates overview, work orders, asset custody, exception recovery, evidence, Fleet & GPS, integrations, and audit/access. Fleet GPS uses tenant-scoped recorded Traccar/GPS observations only. There are no sample coordinates or simulated live vehicles. Optional public basemap tiles are disabled by default in production until explicitly approved.
+
+See [Mission Control 0.3](docs/16-mission-control-ui.md) for UX architecture, official Traccar/Odoo/Leaflet references, data-quality semantics and local startup.
+
 ## Release 0.2
 
 - PostgreSQL production persistence with versioned migrations, tenant foreign keys and transactionally serialized writes. SQLite remains available for local development.
