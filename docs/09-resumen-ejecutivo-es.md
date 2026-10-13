@@ -1,3 +1,5 @@
+> Implementation update (2026-10-13): see [release 0.2](11-release-0.2.md) and [operations](10-production-operations.md). The original product/market discussion below is retained as historical context.
+
 # RALLY — Resumen ejecutivo para Thradex / VtkALL
 
 **Fecha:** 13 de octubre de 2026 · **Estado:** prototipo técnico MK0 + hipótesis comercial por validar.

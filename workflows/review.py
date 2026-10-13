@@ -15,10 +15,12 @@ async def read_case(case_id: str) -> dict:
     base = os.environ["RALLY_URL"].rstrip("/")
     token = os.environ["RALLY_TENANT_TOKEN"]
     async with httpx.AsyncClient(timeout=15.0) as client:
-        res = await client.get(base + "/api/cases", headers={"Authorization":"Bearer " + token})
+        res = await client.get(base + "/api/cases/" + case_id, headers={"Authorization":"Bearer " + token})
+        if res.status_code == 404:
+            return {"case_id": case_id, "found": False, "state": "missing"}
         res.raise_for_status()
-        matches = [x for x in res.json() if x["id"] == case_id]
-    return {"case_id": case_id, "found": bool(matches), "state": matches[0]["state"] if matches else "missing"}
+        case = res.json()
+    return {"case_id": case_id, "found": True, "state": case["state"]}
 
 @workflow.defn
 class HumanCaseReview:

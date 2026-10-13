@@ -4,7 +4,7 @@ GPS evidence proves only a device-reported position; it does NOT prove that a
 job was performed or an asset was in a vehicle.
 """
 from hashlib import sha256
-from urllib.parse import urlparse
+from adapters.transport import validate_url, request
 import httpx
 
 def location_evidence(position: dict, asset_id: str) -> dict:
@@ -35,9 +35,7 @@ def location_evidence(position: dict, asset_id: str) -> dict:
 
 class Traccar:
     def __init__(self, base_url: str, bearer_token: str):
-        host = urlparse(base_url)
-        if host.scheme != "https" and host.hostname not in ("localhost", "127.0.0.1"):
-            raise ValueError("Traccar endpoint must use HTTPS outside localhost")
+        validate_url(base_url)
         if not bearer_token:
             raise ValueError("Traccar token is required")
         self.base_url = base_url.rstrip("/")
@@ -46,7 +44,7 @@ class Traccar:
     async def positions(self, device_id: int | None = None) -> list[dict]:
         params = {"deviceId": device_id} if device_id is not None else {}
         async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get(
+            response = await request(client, "GET",
                 self.base_url + "/api/positions",
                 headers={"Authorization": "Bearer " + self.token},
                 params=params,

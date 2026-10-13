@@ -1,3 +1,5 @@
+> Implementation update (2026-10-13): see [release 0.2](11-release-0.2.md) and [operations](10-production-operations.md). The original product/market discussion below is retained as historical context.
+
 # Rally — Product Thesis
 
 Date: 2026-10-13. MK0 code implements only a subset of this strategy.

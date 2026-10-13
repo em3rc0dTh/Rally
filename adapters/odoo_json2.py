@@ -4,7 +4,7 @@ External API requires compatible Odoo deployment/subscription. Never treat an
 HTTP success as verification of business completion. No writes or retries.
 """
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from adapters.transport import validate_url, request
 import httpx
 
 @dataclass(frozen=True)
@@ -14,9 +14,7 @@ class OdooConfig:
     api_key: str
 
     def validate(self):
-        parsed = urlparse(self.base_url)
-        if parsed.scheme != "https" and parsed.hostname not in ("localhost", "127.0.0.1"):
-            raise ValueError("Odoo endpoint must use HTTPS outside localhost")
+        validate_url(self.base_url)
         if not self.database or not self.api_key:
             raise ValueError("Odoo database and API key are required")
 
@@ -25,7 +23,7 @@ class OdooJSON2:
         config.validate()
         self.config = config
 
-    async def search_read(self, model: str, domain: list, fields: list[str], limit: int = 100):
+    async def search_read(self, model: str, domain: list, fields: list[str], limit: int = 100, order: str = "id asc"):
         if model not in {"sale.order", "project.task", "stock.picking"}:
             raise ValueError("Model not approved for read-only Rally connector")
         if not 1 <= limit <= 500:
@@ -36,8 +34,8 @@ class OdooJSON2:
         }
         url = self.config.base_url.rstrip("/") + "/json/2/" + model + "/search_read"
         async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.post(
-                url, headers=headers, json={"domain": domain, "fields": fields, "limit": limit}
+            response = await request(client, "POST",
+                url, headers=headers, json={"domain": domain, "fields": fields, "limit": limit, "order": order}
             )
             response.raise_for_status()
             result = response.json()

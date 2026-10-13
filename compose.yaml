@@ -1,11 +1,24 @@
+# Development: SQLite and loopback only. Production uses compose.production.yaml.
+x-app: &app
+  build: .
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    RALLY_DB_PATH: /data/rally.db
+  volumes:
+    - rally_data:/data
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: [/tmp]
 services:
   rally:
-    build: .
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      RALLY_DB_PATH: /data/rally.db
-    ports:
-      - "127.0.0.1:8080:8080"
-    volumes:
-      - ./data:/data
+    <<: *app
+    ports: ["127.0.0.1:8080:8080"]
+  worker:
+    <<: *app
+    command: ["python", "-m", "rally.worker"]
+    healthcheck:
+      disable: true
+volumes:
+  rally_data:

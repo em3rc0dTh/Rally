@@ -1,71 +1,50 @@
-# Technical Architecture & Reliability Contract
+# Runtime architecture and invariants — 0.2
 
-## Logical system
-
-~~~mermaid
+```mermaid
 flowchart TD
- O[Odoo ERP: work intent] --> OA[Odoo read-only adapter]
- T[Traccar: device position] --> TA[GPS normalizer]
- R[RFID readers via edge gateway] --> RA[RFID normalizer]
- Q[QR/operator claims] --> API[Rally tenant API]
- OA --> API
- TA --> API
- RA --> API
- API --> DB[(Rally tenant state / evidence / audit)]
- DB --> RECON[Deterministic reconciliation]
- RECON --> CASE[Exception queue]
- CASE --> UI[Mission Control]
- CASE -. future .-> TEMP[Temporal review / recovery]
-~~~
+ Browser[Mission Control] --> TLS[Caddy HTTPS]
+ Odoo[Odoo polling] --> TLS
+ GPS[Traccar polling] --> TLS
+ RFID[RFID disk spool] --> TLS
+ TLS --> API[API and authorization]
+ API --> DB[(PostgreSQL)]
+ Worker[Reconciliation worker] --> DB
+ DB --> Cases[Cases and audit]
+ Cases --> Browser
+```
 
-Odoo, Traccar, and RFID clients currently exist as **separate read/normalization code**; they are not scheduled, provisioned, or commercially certified. Temporal is not wired to the Rally API.
+The API and worker share PostgreSQL. SQLite is a development backend only; production startup rejects it. Application packages include the cockpit assets, adapters and optional Temporal source. Container runtime is non-root and read-only.
 
-## Invariants currently implemented in MK0
+## Data and concurrency
 
-- API bearer token resolves exactly one tenant. Cross-tenant IDs for assets, jobs and custody are rejected.
-- Asset tags and job external references are unique **per tenant**.
-- Only **one active custody assignment for each asset**; SQL partial unique index plus SQLite `BEGIN IMMEDIATE` for issue/return operations.
-- Custody-changing commands must supply an idempotency key; same key+same payload is safe to replay, different payload conflicts.
-- Physical observations do not close work orders or transition custody automatically.
-- Evidence uses source + source_event_id deduplication with conflicting duplicate rejection.
-- Reconciliation fingerprints deterministic conditions: overdue returns, and completed jobs with active equipment custody.
-- Exception closure requires that business state no longer violates the rule, then a new reconciliation scan.
-- Audit records are append-only via current API, **not tamper-proof against database administrators**.
+Migrations run under a database-wide transaction lock. Existing MK0 SQLite schemas are upgraded in place; production data transfer uses `python -m rally.migrate_sqlite` on a backup copy. Schema versions are persisted in `schema_migrations`.
 
-## Example
+All business writes acquire the same PostgreSQL transaction advisory lock (SQLite uses BEGIN IMMEDIATE). This intentionally serializes writes across API and worker processes, prioritizing consistency at moderate volume. There is no claim of high-throughput telemetry capacity. Scale changes require profiling and a tenant-scoped locking redesign; adding API replicas alone will not increase write throughput.
 
-~~~mermaid
-sequenceDiagram
- participant User
- participant API
- participant DB
- User->>API: Create work order + register asset
- User->>API: Issue asset (Idempotency-Key)
- API->>DB: Assert tenant, state, exclusive active custody
- DB-->>API: assignment + audit
- User->>API: Complete work order
- User->>API: Run reconcile
- API->>DB: Compare completed work to active custody
- DB-->>User: Open exception
- User->>API: Confirm return
- User->>API: Reconcile again
- DB-->>User: Condition resolved, audit history retained
-~~~
+- Credential lookup determines tenant; request bodies cannot select it.
+- PostgreSQL compound foreign keys protect asset/job relationships within the same tenant.
+- A partial unique index permits at most one active custody per asset.
+- Custody mutation, audit and idempotency response commit together.
+- Completion reads and writes in the same transaction as its audit.
+- Evidence replay lookup and insertion share a transaction; same ID with different content conflicts.
+- Reconciliation reads active custody and writes exceptions in a single transaction, preventing stale-snapshot closure.
+- Acknowledgment and notes cannot resolve an outstanding condition. Only supported deterministic conditions clear automatically after business state changes; every closure records why.
+- Observations and audit are append-only through the API, not tamper-proof against database administrators.
 
-## Why Temporal is optional, not central
+## Identity
 
-Temporal supports durable exceptional workflows: multi-step retries, approvals, long timers, and post-action verification. It does not independently detect missing source events or guarantee exactly-once external effects. We should not schedule one workflow for each GPS ping or RFID read. Use a streaming/edge normalization boundary first; trigger Temporal only for expensive exceptions that need intervention.
+Each access token resolves to one named identity and tenant. Connector credentials are source-scoped and cannot browse assets, custody or work orders. Manual cockpit identities can submit manual/QR evidence; they cannot impersonate a sensor source. A source-scoped token authenticates the submitter, not the physical truth of a reading.
 
-## Target integrations
+## Background operation
 
-**Odoo**: JSON-2 external API, explicit per-database tenant mapping, stable record IDs, scoped read rights. Odoo deployment/subscription eligibility must be checked. Never automatically mutate invoices, orders, stock, or payments as an unverified retry.
+The reconciliation worker scans tenant state every configured interval. A crash does not lose the exception source: the next cycle derives it again from persisted custody. Worker success is recorded in the database. `/readyz` returns 503 if the worker is stale or the database is unavailable.
 
-**Traccar**: fetch device positions and map device IDs to Rally asset IDs explicitly. This is a reported vehicle/device position, not proof a technician worked.
+Odoo and Traccar run in separate supervised processes, one tenant/provider credential per process. They send health heartbeats. Missing heartbeats mean unknown/stale coverage, never proof that nothing failed. Traccar polls current positions; it does not promise a complete historical GPS track between polls. RFID retains normalized events locally before delivery and deletes them after successful API acknowledgment.
 
-**RFID**: edge LLRP/SDK reader emits reader ID, EPC, timestamp, signal and event ID. Map EPC explicitly, deduplicate; reader sightings are not custody authority.
+Temporal is an optional read-only review example, excluded from the production dependency set. Core recovery ownership, notes and automatic verification work without it. No external ERP writes or arbitrary recovery side effects are implemented.
 
-## Scalability gate
+## Boundaries
 
-MK0 SQLite is a local single-instance database, not multi-region HA. A production service should move to PostgreSQL with migrations, tenant-scoped roles, ingestion queues/outbox, retention controls, backups/restore, end-to-end tracing and dedicated time-series ingestion if needed.
+List endpoints return at most 500 rows; default 200, with `offset` pagination and stable ordering by timestamp + ID. Pagination is a live view, not a point-in-time export: concurrent inserts may shift pages. The UI deduplicates loaded records; Refresh starts a fresh view. Audit and evidence bulk archival should use a database snapshot.
 
-Odoo engineering source: https://github.com/Em3rc0d/odoo-engineering
+This is a single-region, single-database deployment design. High availability, point-in-time recovery and external immutable audit storage are deployment responsibilities, not claims made by this repository.

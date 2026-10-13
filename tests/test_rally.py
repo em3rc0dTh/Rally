@@ -43,9 +43,11 @@ def test_reconciliation_opens_and_resolves(authorized):
 def test_evidence_deduplicated_but_not_conflated_with_custody(authorized):
     api,h=authorized["api"],authorized["headers"]
     asset=api.post("/api/assets",headers=h,json={"tag":"TAG-9","name":"Router"}).json()
+    connector = api.post("/api/credentials", headers=h, json={"name":"RFID reader", "role":"connector", "source":"rfid"}).json()
+    sensor = {"Authorization": "Bearer " + connector["api_token"]}
     raw={"asset_id":asset["id"],"source":"rfid","source_event_id":"reader-123","event_type":"asset_seen","observed_at":datetime.now(timezone.utc).isoformat(),"payload":{"reader":"dock-2"}}
-    assert api.post("/api/evidence",headers=h,json=raw).status_code == 201
-    assert api.post("/api/evidence",headers=h,json=raw).status_code == 201
+    assert api.post("/api/evidence",headers=sensor,json=raw).status_code == 201
+    assert api.post("/api/evidence",headers=sensor,json=raw).status_code == 201
     assert len(api.get("/api/evidence",headers=h).json()) == 1
-    assert api.post("/api/evidence",headers=h,json={**raw,"event_type":"different"}).status_code == 409
+    assert api.post("/api/evidence",headers=sensor,json={**raw,"event_type":"different"}).status_code == 409
     assert api.get("/api/overview",headers=h).json()["active_custody"] == 0

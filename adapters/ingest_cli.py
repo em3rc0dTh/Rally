@@ -7,7 +7,8 @@ Run periodically only after validating real device data and access rights.
 import asyncio
 import json
 import os
-import httpx
+from adapters.transport import RallyClient
+from hashlib import sha256
 from adapters.traccar import Traccar, location_evidence
 
 async def main():
@@ -18,20 +19,22 @@ async def main():
     traccar = Traccar(os.environ["TRACCAR_URL"], os.environ["TRACCAR_TOKEN"])
     positions = await traccar.positions()
     sent, ignored = 0, 0
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        for pos in positions:
-            asset_id = mapping.get(str(pos.get("deviceId")))
-            if not asset_id:
-                ignored += 1
-                continue
-            observation = location_evidence(pos, asset_id)
-            reply = await client.post(
-                os.environ["RALLY_URL"].rstrip("/") + "/api/evidence",
-                headers={"Authorization": "Bearer " + os.environ["RALLY_TENANT_TOKEN"]},
-                json=observation,
-            )
-            reply.raise_for_status()
-            sent += 1
+    rally = RallyClient()
+    instance = (os.getenv('TRACCAR_INSTANCE') or sha256(os.environ['TRACCAR_URL'].rstrip('/').encode()).hexdigest()[:16])
+    for pos in positions:
+        asset_id = mapping.get(str(pos.get('deviceId')))
+        if not asset_id:
+            ignored += 1
+            continue
+        observation = location_evidence(pos, asset_id)
+        observation['source_event_id'] = instance + ':' + observation['source_event_id']
+        await rally.post('evidence', observation)
+        sent += 1
+    if ignored:
+        await rally.heartbeat('error', f'Partial coverage: {ignored} unmapped devices; {sent} imported')
+    else:
+        await rally.heartbeat('ok', f'Positions imported: {sent}; provider returned: {len(positions)}')
+
     print(json.dumps({"sent": sent, "unmapped_ignored": ignored}))
 
 if __name__ == "__main__":

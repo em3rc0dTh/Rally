@@ -17,7 +17,7 @@ def rfid_evidence(read: dict, epc_to_asset: dict[str, str]) -> dict:
     event_id = str(read.get("event_id") or sha256((reader+":"+epc+":"+when).encode()).hexdigest())
     return {
         "source": "rfid",
-        "source_event_id": event_id,
+        "source_event_id": sha256((reader + ":" + event_id).encode()).hexdigest(),
         "event_type": "rfid_observed",
         "asset_id": asset_id,
         "job_id": None,

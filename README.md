@@ -2,86 +2,85 @@
 
 **Know what's missing. Recover what failed. Verify what succeeded.**
 
-Rally connects ERP commitments to evidence of physical business execution, detects discrepancies, and manages closure. The MK0 focus is **asset custody and work orders**, with optional Odoo, GPS/Traccar and RFID adapters. This is an **engineering pilot**, not a production SaaS or official Odoo product.
+Rally links work-order intent to equipment custody, immutable-by-API observations and recoverable operational exceptions. The executable scope is equipment custody and work-order assurance. GPS/RFID/QR observations never automatically authorize custody or certify completed work.
 
-## Implemented vs proposed
+## Release 0.2
 
-| Capability | Location | Status |
-| --- | --- | --- |
-| Tenant-scoped API, assets, work orders, custody, idempotency | `rally/app.py`, `rally/storage.py` | Implemented MK0 |
-| Browser Mission Control cockpit | `web/index.html` | Implemented MK0 |
-| Evidence ingestion, deduplication, reconciliation, audit | `rally/app.py` | Implemented MK0 |
-| Odoo 19 JSON-2 data fetch | `adapters/odoo_json2.py` | Read-only code; live credentials not tested |
-| One-shot confirmed Odoo sale → Rally work-order import | `adapters/odoo_sync_cli.py` | Code implemented; live Odoo unverified |
-| Traccar GPS fetch and one-shot import | `adapters/traccar.py`, `adapters/ingest_cli.py` | Code implemented; live provider not validated |
-| RFID normalized event and stdin import | `adapters/rfid.py`, `adapters/rfid_ingest_cli.py` | Code implemented; physical readers not integrated |
-| Temporal recovery | `workflows/` | Optional research prototype; NOT wired into main API |
-| Automated checks | `tests/`, `.github/workflows/ci.yml` | Executed in CI |
-| Production distributed architecture, RBAC, subscriptions | `docs/05-roadmap.md` | Not implemented |
+- PostgreSQL production persistence with versioned migrations, tenant foreign keys and transactionally serialized writes. SQLite remains available for local development.
+- Individual bearer identities: administrator, operator, reviewer, viewer and source-scoped connector. Issuance, expiry, revocation and actor audit.
+- Exclusive active custody, replay-safe handover/return, atomic job completion and concurrent-safe evidence deduplication.
+- Periodic reconciliation worker; overdue and completed-job custody exceptions; ownership, notes and condition-based resolution.
+- Mission Control with role-aware controls, in-memory credentials, paginated data, audit, recovery and connector coverage.
+- Odoo confirmed-sale keyset import with explicit company scope; scheduled Odoo/Traccar polling with bounded retry; disk-spooled RFID edge ingestion.
+- Production Compose: private PostgreSQL/API, Caddy TLS, non-root application, readiness, backup/restore and legacy data migration.
 
-## Quick start
+**Delivery status:** source implementation and deployment configuration. This release was produced **without executing tests**, as requested. It is not a certification of a live production environment, hardware, load capacity or vendor compatibility. Review [the release record](docs/11-release-0.2.md) and [operations guide](docs/10-production-operations.md) before customer cutover.
 
-Python 3.11+ required.
+## Development
 
-~~~bash
+Python 3.11+ (container uses 3.12). Generate an administrator secret; do not commit it.
+
+```bash
 git clone https://github.com/em3rc0dTh/Rally.git
 cd Rally
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[test]'
 cp .env.example .env
-# Replace RALLY_ADMIN_KEY with a random 32+ character secret in .env.
+# Set RALLY_ADMIN_KEY to a random secret of at least 32 characters.
+# Example generation: python -c 'import secrets; print(secrets.token_hex(32))'
+docker compose up --build -d
+```
+
+Open http://127.0.0.1:8080. The worker reconciles every 60 seconds. SQLite uses a named Docker volume. For existing MK0 `./data/rally.db`, follow the migration instructions; a new named volume does not automatically contain the old bind-mounted database.
+
+Without Docker:
+
+```bash
+uv sync --frozen --no-dev
 set -a; . ./.env; set +a
-uvicorn rally.app:app --reload --port 8080
-~~~
+uv run --no-sync uvicorn rally.app:app --port 8080 --no-access-log
+# Separate terminal with the same environment:
+uv run --no-sync python -m rally.worker
+```
 
-Open **http://127.0.0.1:8080/** for the operator cockpit and **http://127.0.0.1:8080/docs** for interactive API documentation.
+Local API docs: `/docs`. Liveness: `/healthz`; database + worker readiness: `/readyz`.
 
-Bootstrap a tenant and securely retain the one-time returned API token:
+## Bootstrap
 
-~~~bash
-curl -X POST http://127.0.0.1:8080/api/tenants \
- -H "Content-Type: application/json" \
- -H "X-Admin-Key: $RALLY_ADMIN_KEY" \
- -d '{"name":"Demo Operations"}'
-~~~
+```bash
+curl --fail-with-body http://127.0.0.1:8080/api/tenants \
+  -H "X-Admin-Key: $RALLY_ADMIN_KEY" -H 'Content-Type: application/json' \
+  -d '{"name":"Operations"}'
+```
 
-Paste the tenant token in the cockpit. You can then register assets, create work orders, issue/return equipment, record evidence, complete jobs and reconcile exceptions. For API calls, send `Authorization: Bearer TOKEN`. Custody issue and return calls additionally require `Idempotency-Key` (8–128 characters). To run the reconciliation manually:
+Save the one-time `api_token`. Connect with it in Mission Control, create individual credentials in Access management, then revoke the bootstrap credential after creating another administrator. Use `Authorization: Bearer TOKEN` for API access. Custody commands also require `Idempotency-Key` (8–128 characters); preserve it after uncertain responses.
 
-~~~bash
-curl -X POST http://127.0.0.1:8080/api/reconcile \
- -H "Authorization: Bearer $RALLY_TOKEN"
-~~~
+Create assets and work orders → issue equipment → record observations → complete work → inspect exceptions → return equipment → reconciliation verifies resolution. Acknowledging an exception assigns responsibility; it does not waive the discrepancy.
 
-To launch a **local pilot** in Docker:
+## Production deployment
 
-~~~bash
-cp .env.example .env
-# Set RALLY_ADMIN_KEY to a real secret.
-docker compose up --build
-~~~
+```bash
+cp .env.production.example .env.production
+# Set RALLY_DOMAIN, ACME_EMAIL and two independent random hexadecimal secrets.
+chmod 600 .env.production
+docker compose --env-file .env.production -f compose.production.yaml up --build -d
+```
 
-Runs on loopback port 8080 with persisted `./data`. This is not an internet-ready deployment. See [security limitations](docs/06-security-and-risks.md).
+Point the domain to the host and permit ports 80/443. PostgreSQL and the API have no public port mapping. Provisioning, secrets, backups and external integration credentials belong to the deployment operator. See the [complete runbook](docs/10-production-operations.md), including rollback and migration procedures.
 
-## Complete documentation
+## Documentation
 
-1. [Product identity and competing business hypotheses](docs/00-product-vision.md)
-2. [Market feasibility in Peru, Ecuador, Chile, Bolivia, Argentina and Brazil](docs/01-market-feasibility.md)
-3. [Technical architecture and business consistency guarantees](docs/02-architecture.md)
-4. [Open-source repository catalog and licensing](docs/03-open-source-catalog.md)
-5. [Audit and reuse of odoo-engineering](docs/04-odoo-engineering-audit.md)
-6. [Delivery roadmap and product gates](docs/05-roadmap.md)
-7. [Security, privacy and production risks](docs/06-security-and-risks.md)
-8. [Odoo, Traccar, RFID and Temporal integration guide](docs/07-integration-guide.md)
-9. [Commercial validation and unit economics](docs/08-commercial-validation.md)
-10. [Resumen ejecutivo en español](docs/09-resumen-ejecutivo-es.md)
+| Document | Purpose |
+| --- | --- |
+| [Product vision](docs/00-product-vision.md) | Mission and business hypotheses |
+| [Market study](docs/01-market-feasibility.md) | Original market research, not new validation |
+| [Architecture](docs/02-architecture.md) | Runtime, transaction and recovery contract |
+| [Open-source catalog](docs/03-open-source-catalog.md) | Adoption and provenance |
+| [Odoo engineering audit](docs/04-odoo-engineering-audit.md) | Separate engineering foundation |
+| [Roadmap](docs/05-roadmap.md) | Delivered scope and remaining product gates |
+| [Security](docs/06-security-and-risks.md) | Permissions, boundaries and residual risks |
+| [Integrations](docs/07-integration-guide.md) | Odoo, Traccar, RFID and optional Temporal |
+| [Commercial validation](docs/08-commercial-validation.md) | Buyer validation and economics |
+| [Executive summary](docs/09-resumen-ejecutivo-es.md) | Original Spanish product summary |
+| [Operations](docs/10-production-operations.md) | Deployment, backup, restore and incidents |
+| [Release record](docs/11-release-0.2.md) | Changes and exact verification limits |
 
-## Principles
-
-- **One buyer, one expensive problem, one verifiable outcome.** Do not pretend open-source assembly alone is differentiation.
-- GPS reports **device position**, RFID reports **tag sightings**, QR reports a **scan**. None independently proves customer acceptance or work completion.
-- Do not fork or vendor-copy unresolved third-party code into Rally.
-- Odoo is a third-party ERP; **Rally** is a working name requiring trademark review, not an official Odoo product. Avoid marketing the name "Odoo Rally" without the necessary brand rights.
-- We have deliberately **not selected a public license for Rally-authored source code**. A public GitHub repository does not itself grant unrestricted copying or commercial relicensing.
-
-Source engineering study: https://github.com/Em3rc0d/odoo-engineering
+`odoo-engineering` remains external: https://github.com/Em3rc0d/odoo-engineering. No third-party vendor tree is copied into Rally. Public availability does not grant a license to Rally-authored source; a commercial/public license and trademark clearance remain owner decisions.

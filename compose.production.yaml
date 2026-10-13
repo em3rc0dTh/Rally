@@ -1,0 +1,68 @@
+# Supply --env-file .env.production; keep this stack on one private Docker network.
+x-env: &env
+  RALLY_ENV: production
+  RALLY_ADMIN_KEY: ${RALLY_ADMIN_KEY:?Generate a strong admin key}
+  RALLY_DATABASE_URL: postgresql://rally:${POSTGRES_PASSWORD:?Generate a hexadecimal password}@postgres:5432/rally
+  RALLY_ALLOWED_HOSTS: ${RALLY_DOMAIN:?Set the public domain},127.0.0.1,localhost,rally
+  RALLY_RECONCILE_SECONDS: "60"
+  RALLY_WORKER_STALE_SECONDS: "180"
+  RALLY_CONNECTOR_STALE_SECONDS: "300"
+x-app: &app
+  build: .
+  restart: unless-stopped
+  environment: *env
+  depends_on:
+    postgres:
+      condition: service_healthy
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  mem_limit: 512m
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+services:
+  postgres:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rally
+      POSTGRES_USER: rally
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Required}
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rally -d rally"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 1g
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  rally:
+    <<: *app
+    # All clients traverse Caddy. Never publish the internal API port.
+    command: ["uvicorn", "rally.app:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log", "--proxy-headers", "--forwarded-allow-ips=*", "--limit-concurrency", "100", "--timeout-keep-alive", "5"]
+  worker:
+    <<: *app
+    command: ["python", "-m", "rally.worker"]
+    healthcheck:
+      disable: true
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      RALLY_DOMAIN: ${RALLY_DOMAIN:?Required}
+      ACME_EMAIL: ${ACME_EMAIL:?Required}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [rally]
+    mem_limit: 256m
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

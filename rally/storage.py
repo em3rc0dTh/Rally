@@ -1,15 +1,20 @@
-"""SQLite reference persistence, transactions and tenant-local uniqueness.
-
-SQLite is suited to the single-instance MK0 pilot. Production multi-replica deployment
-requires a reviewed PostgreSQL migration, backups, authorization and observability.
-"""
+"""Versioned persistence. PostgreSQL for production; SQLite for local development."""
 import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:
+    psycopg = None
+
+IntegrityError = (sqlite3.IntegrityError,) + ((psycopg.IntegrityError,) if psycopg else ())
+OperationalError = (sqlite3.OperationalError,) + ((psycopg.OperationalError,) if psycopg else ())
+
 SCHEMA = """
-PRAGMA foreign_keys=ON;
+
 CREATE TABLE IF NOT EXISTS tenants (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL
 );
@@ -63,32 +68,144 @@ CREATE INDEX IF NOT EXISTS idx_evidence_tenant ON evidence(tenant_id, observed_a
 CREATE INDEX IF NOT EXISTS idx_case_tenant ON cases(tenant_id, state);
 """
 
-def database_path() -> str:
-    return os.getenv("RALLY_DB_PATH", "./data/rally.db")
+MIGRATIONS = [SCHEMA, """
+CREATE TABLE IF NOT EXISTS credentials (
+ id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id),
+ name TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','operator','reviewer','viewer','connector')),
+ token_hash TEXT NOT NULL UNIQUE, source TEXT, created_at TEXT NOT NULL,
+ expires_at TEXT, revoked_at TEXT
+);
+ALTER TABLE audit ADD COLUMN actor_id TEXT;
+ALTER TABLE cases ADD COLUMN owner_id TEXT;
+ALTER TABLE cases ADD COLUMN acknowledged_at TEXT;
+CREATE TABLE case_notes (
+ id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id),
+ case_id TEXT NOT NULL REFERENCES cases(id), actor_id TEXT NOT NULL,
+ note TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE connector_status (
+ tenant_id TEXT NOT NULL REFERENCES tenants(id), name TEXT NOT NULL,
+ last_attempt TEXT NOT NULL, last_success TEXT, status TEXT NOT NULL,
+ detail TEXT NOT NULL, PRIMARY KEY(tenant_id,name)
+);
+CREATE TABLE worker_status (name TEXT PRIMARY KEY, last_success TEXT NOT NULL);
+CREATE INDEX idx_custody_scan ON custody(tenant_id,state,due_at);
+CREATE INDEX idx_audit_tenant ON audit(tenant_id,created_at,id);
+CREATE INDEX idx_credential_tenant ON credentials(tenant_id);
+CREATE INDEX idx_case_notes ON case_notes(tenant_id,case_id,created_at);
+""", """
+CREATE UNIQUE INDEX uq_asset_tenant_id ON assets(tenant_id,id);
+CREATE UNIQUE INDEX uq_job_tenant_id ON jobs(tenant_id,id);
+"""]
+
+class Connection:
+    def __init__(self, raw, postgres=False):
+        self.raw, self.postgres = raw, postgres
+        self.actor_id = 'system'
+        self.actor_role = 'system'
+        self.actor_source = None
+
+    def execute(self, sql, args=()):
+        if self.postgres:
+            if sql == 'BEGIN IMMEDIATE':
+                self.raw.execute('BEGIN')
+                self.raw.execute("SET LOCAL lock_timeout = '20s'")
+                # All application writes use this transaction lock. Conservative and
+                # cross-process safe; shard by tenant only after measured demand.
+                return self.raw.execute('SELECT pg_advisory_xact_lock(72419001)')
+            sql = sql.replace('?', '%s')
+        return self.raw.execute(sql, args)
+
+    def commit(self):
+        if self.postgres:
+            self.raw.execute('COMMIT')
+        else:
+            self.raw.commit()
+
+    def rollback(self):
+        if self.postgres:
+            self.raw.execute('ROLLBACK')
+        else:
+            self.raw.rollback()
+
+    def close(self):
+        self.raw.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, kind, value, traceback):
+        self.close()
+
+
+def database_path():
+    return os.getenv('RALLY_DB_PATH', './data/rally.db')
+
 
 def connect(path=None):
+    url = os.getenv('RALLY_DATABASE_URL', '') if path is None else ''
+    if url:
+        if not psycopg:
+            raise RuntimeError('Install Rally PostgreSQL dependencies')
+        return Connection(psycopg.connect(url, autocommit=True, row_factory=dict_row, connect_timeout=10), True)
     path = path or database_path()
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(path, isolation_level=None, timeout=20, check_same_thread=False)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA foreign_keys=ON")
-    con.execute("PRAGMA busy_timeout=20000")
-    return con
+    raw = sqlite3.connect(path, isolation_level=None, timeout=20, check_same_thread=False)
+    raw.row_factory = sqlite3.Row
+    raw.execute('PRAGMA foreign_keys=ON')
+    raw.execute('PRAGMA busy_timeout=20000')
+    return Connection(raw)
+
+
+@contextmanager
+def transaction(db):
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        yield db
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+
 
 def initialize(path=None):
-    with connect(path) as con:
-        con.executescript(SCHEMA)
+    with connect(path) as db:
+        if not db.postgres:
+            db.execute('PRAGMA journal_mode=WAL')
+        with transaction(db):
+            db.execute('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)')
+            versions = {r['version'] for r in db.execute('SELECT version FROM schema_migrations').fetchall()}
+            for version, sql in enumerate(MIGRATIONS, 1):
+                if version in versions:
+                    continue
+                for statement in sql.split(';'):
+                    if statement.strip():
+                        db.execute(statement)
+                db.execute('INSERT INTO schema_migrations(version) VALUES(?)', (version,))
+            # Preserve existing MK0 bearer keys as revocable tenant admin identities.
+            db.execute("INSERT INTO credentials(id,tenant_id,name,role,token_hash,created_at) "
+                       "SELECT id,id,'Bootstrap administrator','admin',token_hash,created_at FROM tenants WHERE 1=1 "
+                       "ON CONFLICT DO NOTHING")
+            # Version 4 is reserved on both backends for PostgreSQL tenant constraints.
+            # Compound foreign keys enforce tenant isolation in PostgreSQL as well as API.
+            if db.postgres and 4 not in versions:
+                for table in ('custody', 'evidence'):
+                    for column, parent in (('asset_id', 'assets'), ('job_id', 'jobs')):
+                        db.execute(f'ALTER TABLE {table} ADD CONSTRAINT {table}_{column}_tenant_fk '
+                                   f'FOREIGN KEY(tenant_id,{column}) REFERENCES {parent}(tenant_id,id)')
+            if 4 not in versions:
+                db.execute('INSERT INTO schema_migrations(version) VALUES(4)')
+
 
 def get_db():
-    con = connect()
-    try:
-        yield con
-    finally:
-        con.close()
+    with connect() as db:
+        yield db
 
-def one(con, sql, args=()):
-    row = con.execute(sql, args).fetchone()
+
+def one(db, sql, args=()):
+    row = db.execute(sql, args).fetchone()
     return dict(row) if row else None
 
-def all_rows(con, sql, args=()):
-    return [dict(x) for x in con.execute(sql, args).fetchall()]
+
+def all_rows(db, sql, args=()):
+    return [dict(x) for x in db.execute(sql, args).fetchall()]

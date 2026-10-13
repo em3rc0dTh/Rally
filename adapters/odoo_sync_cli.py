@@ -2,7 +2,7 @@
 
 This imports confirmed sales as Rally work-order *intent* (not job completion).
 Stable references prevent duplicate import across repeated invocations.
-No webhooks, backfill pagination, deletes or update sync are implemented.
+Full keyset pagination and title upserts; no deletes or automatic completion.
 """
 import asyncio
 import os
@@ -21,41 +21,35 @@ def map_confirmed_sale(order: dict, database: str) -> dict:
     }
 
 async def main():
-    required = ("ODOO_URL", "ODOO_DATABASE", "ODOO_API_KEY", "RALLY_URL", "RALLY_TENANT_TOKEN")
+    from adapters.transport import RallyClient
+    required = ('ODOO_URL', 'ODOO_DATABASE', 'ODOO_API_KEY', 'ODOO_COMPANY_IDS', 'RALLY_URL', 'RALLY_TENANT_TOKEN')
     if missing := [x for x in required if not os.getenv(x)]:
-        raise RuntimeError("Missing: " + ", ".join(missing))
-    db = os.environ["ODOO_DATABASE"]
-    odoo = OdooJSON2(OdooConfig(os.environ["ODOO_URL"], db, os.environ["ODOO_API_KEY"]))
-    orders = await odoo.search_read(
-        "sale.order", [["state", "in", ["sale", "done"]]],
-        ["id", "name", "state", "date_order"], limit=500
-    )
-    created = already_present = 0
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        base = os.environ["RALLY_URL"].rstrip("/") + "/api/jobs"
-        headers = {"Authorization": "Bearer " + os.environ["RALLY_TENANT_TOKEN"]}
-        existing_request = await client.get(base, headers=headers)
-        existing_request.raise_for_status()
-        existing = {j["external_ref"] for j in existing_request.json()}
+        raise RuntimeError('Missing: ' + ', '.join(missing))
+    database = os.environ['ODOO_DATABASE']
+    companies = [int(x.strip()) for x in os.environ['ODOO_COMPANY_IDS'].split(',')]
+    if not companies or any(x < 1 for x in companies):
+        raise ValueError('Explicit positive Odoo company IDs required')
+    odoo = OdooJSON2(OdooConfig(os.environ['ODOO_URL'], database, os.environ['ODOO_API_KEY']))
+    rally = RallyClient()
+    cursor, imported = 0, 0
+    # Full keyset traversal each cycle also picks up changed titles and records
+    # confirmed after a prior cycle. Never interprets ERP status as physical completion.
+    while True:
+        orders = await odoo.search_read('sale.order',
+            [['state', 'in', ['sale', 'done']], ['company_id', 'in', companies], ['id', '>', cursor]],
+            ['id', 'name', 'state', 'company_id'], limit=500)
+        if not orders:
+            break
         for order in orders:
-            job = map_confirmed_sale(order, db)
-            if job["external_ref"] in existing:
-                already_present += 1
-                continue
-            response = await client.post(base, headers=headers, json=job)
-            if response.status_code == 409:
-                # Concurrent importer: refresh and prove the key exists.
-                again = await client.get(base, headers=headers)
-                again.raise_for_status()
-                if job["external_ref"] not in {j["external_ref"] for j in again.json()}:
-                    response.raise_for_status()
-                already_present += 1
-                continue
-            response.raise_for_status()
-            existing.add(job["external_ref"])
-            created += 1
-    print({"created": created, "already_present": already_present, "retrieved": len(orders),
-           "limit": 500, "note": "One page; no guaranteed full synchronization"})
+            job = map_confirmed_sale(order, (os.getenv('ODOO_INSTANCE') or database))
+            await rally.post('jobs/import', job)
+            imported += 1
+        next_cursor = max(x['id'] for x in orders)
+        if next_cursor <= cursor:
+            raise ValueError('Odoo pagination did not advance')
+        cursor = next_cursor
+    await rally.heartbeat('ok', f'Confirmed sales imported: {imported}')
+    print({'imported': imported})
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())

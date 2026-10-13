@@ -1,102 +1,53 @@
-# Integration and operations guide
+# Integrations — 0.2
 
-All examples refer to the standalone MK0 server. No provider live access or compatibility certification is claimed.
+Use a separate **connector** credential per tenant and provider. In Mission Control → Access management, choose role `connector` and a source (`odoo`, `traccar`, `rfid`, `gps`). Do not reuse the tenant administrator token. Secrets stay outside the repository.
 
-## API bootstrap
+Copy `.env.connector.example` to a protected deployment-specific environment file. Start the runner with that environment loaded:
 
-Run server per root README, then create tenant via admin-protected `POST /api/tenants`. Copy one-time token into tenant environment/secure vault. Tenant API supports Swagger at `/docs`. Token is never a tenant ID and cannot select another tenant.
+```bash
+set -a; . ./.env.connector; set +a
+uv run --no-sync python -m adapters.runner
+```
 
-## Odoo 19 read-only JSON-2 adapter
+Use a process supervisor (systemd/container restart policy). `RALLY_CONNECTOR=odoo` or `traccar`; `RALLY_CONNECTOR_SECONDS=60` by default. Successful cycles send a heartbeat, failures report sanitized error classes. API 408/429/5xx and transport failures retry with bounded exponential delay. A later cycle replays idempotent imports. Authentication/schema failures are reported, not treated as successful delivery.
 
-File: `adapters/odoo_json2.py`. Example:
+Endpoints require HTTPS outside localhost. `RALLY_ALLOW_INTERNAL_HTTP=1` is an explicit exception for a trusted private container network, never the public internet. Redirects are not followed with provider credentials.
 
-~~~python
-import asyncio
-from adapters.odoo_json2 import OdooConfig, OdooJSON2
+## Odoo 19
 
-async def main():
-    client = OdooJSON2(OdooConfig(
-        base_url="https://YOUR-ODOO-DOMAIN",
-        database="YOUR_DB",
-        api_key="YOUR_RESTRICTED_ODDO_KEY",
-    ))
-    orders = await client.recent_sale_orders(limit=25)
-    print(orders)
+Required: `ODOO_URL`, `ODOO_DATABASE`, `ODOO_API_KEY`, `ODOO_COMPANY_IDS` (comma-separated positive IDs), `RALLY_URL`, `RALLY_TENANT_TOKEN`. Optional stable `ODOO_INSTANCE` namespace defaults to the database name. Assign distinct namespaces for same-named databases on different servers. Do not change the namespace after importing.
 
-asyncio.run(main())
-~~~
+The read-only JSON-2 adapter imports confirmed `sale.order` records in ascending-ID pages of 500. Every cycle traverses the full confirmed set, so later confirmations and changed titles are picked up. Explicit `company_id` domain limits business scope; upstream API rights must enforce the same scope. References are `odoo:INSTANCE:sale.order:ID`.
 
-Use HTTPS and a narrowly restricted integration account. Validate Odoo external API availability for the actual deployment/plan. The adapter calls `/json/2/sale.order/search_read`. A **one-shot importer** maps up to 500 confirmed Odoo sales into Rally work-order intent, keyed as database + model + record ID. It does NOT provide continuous sync, full pagination or Odoo status updates:
+`POST /api/jobs/import` atomically upserts title by tenant/external reference. It does not reset locally completed jobs, mirror cancellations or automatically complete work. Deleted/unconfirmed source records are not automatically deleted from Rally. Sales intent is not physical execution proof.
 
-~~~bash
-export ODOO_URL=https://your-odoo-instance
-export ODOO_DATABASE=your_database
-export ODOO_API_KEY=YOUR_RESTRICTED_API_KEY
-export RALLY_URL=http://127.0.0.1:8080
-export RALLY_TENANT_TOKEN=YOUR_RALLY_TOKEN
-python -m adapters.odoo_sync_cli
-~~~
+One-shot operation: `python -m adapters.odoo_sync_cli`. Real Odoo edition, subscription/API eligibility, company permissions and response behavior remain deployment-specific.
 
-Use a controlled Odoo environment; real provider compatibility remains unverified.
+Primary reference: https://www.odoo.com/documentation/19.0/developer/reference/external_api.html
 
-Odoo JSON-2 documentation: https://www.odoo.com/documentation/19.0/developer/reference/external_api.html
+## Traccar
 
-## Traccar read-only polling into Rally
+Required: `TRACCAR_URL`, `TRACCAR_TOKEN`, `TRACCAR_DEVICE_ASSET_MAP` JSON mapping device IDs to Rally asset IDs, plus Rally URL/credential. `TRACCAR_INSTANCE` provides a stable namespace; default derives from server URL. Preserve it when migrating endpoints to avoid changed event identities.
 
-Files: `adapters/traccar.py`, `adapters/ingest_cli.py`.
+One-shot: `python -m adapters.ingest_cli`. The runner polls current positions and ingests replay-safe observations. Unmapped devices produce degraded coverage, not silently complete coverage. This is not historical track backfill: events between polls may not be observed. Coordinates, fix time, validity and accuracy remain device claims. A successful empty poll proves API access, not physical reader/device activity.
 
-Required environment:
-- `TRACCAR_URL`: authenticated HTTPS server origin.
-- `TRACCAR_TOKEN`: vendor token for allowed devices.
-- `RALLY_URL`: local Rally API origin.
-- `RALLY_TENANT_TOKEN`: tenant credential.
-- `TRACCAR_DEVICE_ASSET_MAP`: JSON mapping external Traccar device IDs to existing Rally asset UUIDs.
+## RFID edge spool
 
-~~~bash
-export TRACCAR_URL=https://your-traccar-host
-export TRACCAR_TOKEN=YOUR_TRACCAR_TOKEN
-export RALLY_URL=http://127.0.0.1:8080
-export RALLY_TENANT_TOKEN=YOUR_RALLY_TOKEN
-export TRACCAR_DEVICE_ASSET_MAP='{"123":"ASSET_UUID_FROM_RALLY"}'
-python -m adapters.ingest_cli
-~~~
+Provide `RFID_EPC_ASSET_MAP`, `RALLY_URL`, a source `rfid` credential, and persistent `RFID_SPOOL_PATH`. EPC keys are normalized to uppercase. The spool is tenant-bound to prevent accidental replay into another tenant. Reader ID scopes event identity. Input example:
 
-The command runs once; it does not install a daemon or Temporal schedule. It normalizes `/api/positions` responses, rejects out-of-range coordinates, and emits replay-safe source IDs. Confirm your server's authentication and position API semantics with the deployed Traccar version before use. No automatic work-order completion.
+```json
+{"reader_id":"dock-01","epc":"E200001122","observed_at":"2026-10-13T15:00:00Z","event_id":"reader-seq-123","rssi":-42}
+```
 
-## RFID edge ingestion
+```bash
+python -m adapters.rfid_ingest_cli < reader-events.ndjson
+python -m adapters.rfid_ingest_cli --drain
+```
 
-File `adapters/rfid.py` accepts normalized LLRP/reader SDK observations. No physical reader/firmware is bundled. Set EPC-to-asset mapping explicitly.
+An event is committed to disk before a `spooled` acknowledgment. It is deleted only after Rally accepts it. Delivery errors terminate the command and retain the queued event; supervise/restart and drain before resuming input. The upstream gateway must retain lines it has not seen acknowledged. Poison/conflicting events remain queued for operator intervention; do not silently discard them. `--drain` requires provider-independent Rally access to verify tenant binding. No LLRP/firmware driver is bundled.
 
-~~~bash
-export RALLY_URL=http://127.0.0.1:8080
-export RALLY_TENANT_TOKEN=YOUR_RALLY_TOKEN
-export RFID_EPC_ASSET_MAP='{"E200001122":"ASSET_UUID_FROM_RALLY"}'
-echo '{"reader_id":"dock-01","epc":"E200001122","observed_at":"2026-10-13T15:00:00Z","rssi":-42}' \
- | python -m adapters.rfid_ingest_cli
-~~~
+## Coverage and recovery
 
-Only an observation is recorded. Asset custody remains unchanged until authorized handover. In real hardware integration add edge signatures, retries, batching, device identity and EPC lifecycle controls.
+`GET /api/connectors` shows never-seen, stale, degraded or current polling coverage. Heartbeat status is not proof of new physical observations. Use sensor timestamps/validity in the evidence ledger to assess actual observation quality.
 
-## Temporal
-
-Temporal workflow sample in `workflows/` is an **optional example of a durable human case review**, not automatically invoked by reconciliation. Temporal isn't necessary for MK0 to work. Do not let external retries mutate Odoo without idempotent business preconditions and independent verification.
-
-## Production guidance
-
-One instance, loopback-only Docker, no externally reachable port. If expanded: move data to PostgreSQL, add versioned migrations, outbox, ingestion worker, background replay, cloud TLS, scopes/RBAC, per-device auth, backups and explicit data retention.
-
-### Optional Temporal case review commands
-
-~~~bash
-python -m pip install -e '.[temporal]'
-# Start a compatible Temporal development server in another process.
-export TEMPORAL_ADDRESS=localhost:7233
-export RALLY_URL=http://127.0.0.1:8080
-export RALLY_TENANT_TOKEN=YOUR_RALLY_TOKEN
-python -m workflows.worker
-# In another shell: start and signal an existing exception case
-python -m workflows.start_review start CASE_UUID
-python -m workflows.start_review approve CASE_UUID
-~~~
-
-This only performs a read-only case recheck following a human signal. It does not automatically recover or edit any ERP record.
+Core exception recovery uses durable database state, ownership, notes and periodic reconciliation. It does not depend on Temporal. The `workflows/` directory remains an optional read-only human-review example; install `uv sync --extra temporal` to use it against your Temporal server. The example is not enabled or represented as production orchestration.
