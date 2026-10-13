@@ -14,6 +14,7 @@ from uuid import uuid4
 import json
 import os
 import logging
+import math
 import re
 from datetime import timedelta
 
@@ -337,6 +338,69 @@ def append_evidence(body: EvidenceIn, tid: str = Depends(tenant), db=Depends(get
 @app.get("/api/evidence")
 def evidence(tid: str = Depends(tenant), db=Depends(get_db), limit: int = Query(200, ge=1, le=500), offset: int = Query(0, ge=0)):
     return all_rows(db, "SELECT * FROM evidence WHERE tenant_id=? ORDER BY received_at DESC,id DESC LIMIT ? OFFSET ?", (tid, limit, offset))
+
+
+@app.get("/api/geo/positions")
+def geo_positions(tid: str = Depends(tenant), db=Depends(get_db),
+                  limit: int = Query(1000, ge=1, le=2000)):
+    """Read-only, tenant-bound latest device positions from persisted observations.
+
+    Locations are NOT a separate source of truth: each row comes from a
+    previously received Traccar/GPS evidence event and retains its provenance.
+    No provider credentials are accessible to the browser.
+    """
+    rows = all_rows(db,
+        "SELECT e.asset_id,e.source,e.source_event_id,e.observed_at,e.received_at,"
+        "e.payload,a.tag AS asset_tag,a.name AS asset_name "
+        "FROM evidence e LEFT JOIN assets a "
+        "ON a.id=e.asset_id AND a.tenant_id=e.tenant_id "
+        "WHERE e.tenant_id=? AND e.source IN ('traccar','gps') "
+        "AND e.event_type='gps_position_reported' "
+        "ORDER BY e.observed_at DESC,e.id DESC LIMIT ?",
+        (tid, limit))
+    seen = set()
+    results = []
+    for row in rows:
+        try:
+            payload = json.loads(row['payload']) if isinstance(row['payload'], str) else row['payload']
+            if not isinstance(payload, dict):
+                continue
+            lat, lon = float(payload['latitude']), float(payload['longitude'])
+            if not math.isfinite(lat) or not math.isfinite(lon) or not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+                continue
+            stamp_time = datetime.fromisoformat(str(row['observed_at']).replace('Z','+00:00'))
+            if stamp_time.tzinfo is None:
+                continue
+            device = str(payload.get('device_id') or row['asset_id'] or row['source_event_id'])
+            key = (row['source'], device)
+            if key in seen:
+                continue
+            seen.add(key)
+            age = (datetime.now(timezone.utc) - stamp_time.astimezone(timezone.utc)).total_seconds()
+            valid = payload.get('valid') is True
+            fresh = -300 <= age <= max(30, int(os.getenv('TRACCAR_MAX_POSITION_AGE_SECONDS', '300')))
+            speed = payload.get('speed')
+            accuracy = payload.get('accuracy')
+            results.append({
+                'asset_id': row['asset_id'], 'asset_tag': row['asset_tag'],
+                'asset_name': row['asset_name'], 'device_id': device,
+                'source': row['source'], 'source_event_id': row['source_event_id'],
+                'observed_at': row['observed_at'], 'received_at': row['received_at'],
+                'latitude': lat, 'longitude': lon,
+                'valid': valid, 'fresh': fresh, 'quality': 'current' if valid and fresh else 'unverified',
+                'speed': speed if isinstance(speed, (int, float)) and math.isfinite(speed) else None,
+                'accuracy': accuracy if isinstance(accuracy, (int, float)) and math.isfinite(accuracy) else None,
+            })
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+    return results
+
+@app.get("/api/map/config")
+def map_config(tid: str = Depends(tenant)):
+    """OSM tiles are explicitly opt-in for production due to geodata privacy."""
+    enabled = os.getenv('RALLY_PUBLIC_MAP_TILES',
+                        'off' if os.getenv('RALLY_ENV') == 'production' else 'on').lower() == 'on'
+    return {'public_tiles_enabled': enabled, 'tiles_provider': 'OpenStreetMap' if enabled else None}
 
 @app.post("/api/reconcile")
 def reconcile(tid: str = Depends(tenant), db=Depends(get_db)):
