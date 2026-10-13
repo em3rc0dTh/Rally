@@ -33,6 +33,8 @@ jobs:
         run: python -m compileall -q rally adapters workflows tests
       - name: Run SQLite and disposable PostgreSQL integration tests
         run: python -m pytest -q
+      - name: Verify production configuration rejects placeholders
+        run: python -c "from ops.preflight import validate; assert validate({'RALLY_ADMIN_KEY':'weak','POSTGRES_PASSWORD':'weak','RALLY_DOMAIN':'rally.example.com','ACME_EMAIL':'x@example.com'})"
       - name: Validate production Compose
         env:
           RALLY_ADMIN_KEY: "integration-only-abcdefghijklmnopqrstuv1234567890"

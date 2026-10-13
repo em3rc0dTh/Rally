@@ -100,3 +100,12 @@ No destructive retention cron is provided: custody, idempotency and evidence his
 ### Field-service import selector
 
 Before provisioning an Odoo connector, configure `ODOO_WORKORDER_DOMAIN_JSON` with the customer's agreed filter that identifies actual field-service orders. A confirmed sales order must not implicitly be treated as a physical work order. The new importer fails closed when no nonempty simple domain selector is supplied and rejects records outside `ODOO_COMPANY_IDS`. The example `x_rally_work_order` field is not an Odoo standard: implement or substitute an actual field in the customer's ERP and check domain permissions, multi-company separation and results before enabling supervised polling.
+
+
+### Preflight obligatorio antes del primer despliegue
+
+No se debe iniciar una instalación de clientes sin revisar configuración y procedimientos. Cargar las variables **sin imprimir secretos en logs** desde un entorno confiable y ejecutar `python -m ops.preflight`. El chequeo falla si la clave de plataforma o la contraseña PostgreSQL son inseguras, si el dominio/correo son de ejemplo, o si el URL de PostgreSQL opcional no coincide con la contraseña. Es una revisión **estática**: no prueba DNS, emisión ACME, base de datos, recuperación, backups ni conexiones externas. Después ejecutar el despliegue con la versión aprobada, verificar `/readyz`, ejecutar restauración de respaldo en una base separada y certificar proveedor Odoo/Traccar/RFID con datos controlados.
+
+### Control de saturación de spool RFID
+
+`RFID_MAX_SPOOL_EVENTS` limita la cola local a 100000 observaciones por defecto; al alcanzar el tope la ingestión deja de confirmar nuevas lecturas. Conservar los eventos pendientes, drenar/restaurar el enlace, ampliar almacenamiento con capacidad documentada y alertar al operador. No borrar la base del spool para recuperar espacio, porque se perderían observaciones aún no entregadas. Las lecturas anteriores al aviso deben contar con confirmación persistente en el dispositivo/edge.

@@ -23,6 +23,9 @@ async def main():
     db = sqlite3.connect(path)
     db.execute('CREATE TABLE IF NOT EXISTS spool(id TEXT PRIMARY KEY, payload TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS binding(id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL)')
+    max_events = int(os.getenv('RFID_MAX_SPOOL_EVENTS', '100000'))
+    if max_events < 1:
+        raise ValueError('RFID_MAX_SPOOL_EVENTS must be positive')
     import httpx
     from adapters.transport import request
     async with httpx.AsyncClient(timeout=30) as http:
@@ -57,6 +60,8 @@ async def main():
             old = db.execute('SELECT payload FROM spool WHERE id=?', (event_id,)).fetchone()
             if old and old[0] != payload:
                 raise ValueError('Conflicting RFID source ID in spool')
+            if not old and db.execute('SELECT COUNT(*) FROM spool').fetchone()[0] >= max_events:
+                raise RuntimeError('RFID spool event limit reached; stop reader input and drain or recover the spool')
             db.execute('INSERT OR IGNORE INTO spool VALUES(?,?)', (event_id, payload))
             db.commit()
             print(json.dumps({'spooled': event_id}), flush=True)

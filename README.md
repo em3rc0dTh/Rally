@@ -20,6 +20,10 @@ Rally links work-order intent to equipment custody, immutable-by-API observation
 
 **Delivery status:** source implementation and deployment configuration. This release was produced **without executing tests**, as requested. It is not a certification of a live production environment, hardware, load capacity or vendor compatibility. Review [the release record](docs/11-release-0.2.md) and [operations guide](docs/10-production-operations.md) before customer cutover.
 
+## Production configuration gate
+
+Before a real installation, load the approved production environment and run `python -m ops.preflight` (requires Python 3.11+). This rejects placeholders and unsafe deployment secrets but **does not replace live readiness, backups, privacy, or provider certification**. See `docs/10-production-operations.md`.
+
 ## Development
 
 Python 3.11+ (container uses 3.12). Generate an administrator secret; do not commit it.
