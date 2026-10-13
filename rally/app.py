@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from rally.storage import all_rows, get_db, initialize, one, transaction, IntegrityError, OperationalError
 from rally.security import GuardMiddleware, validate_environment
+from rally.erp_contract import MODEL_CONTRACTS, MODEL_NAMES, STATE, NAMESPACE
 
 def stamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -108,7 +109,8 @@ def tenant(request: Request, authorization: str | None = Header(default=None), d
         if role == "reviewer":
             allowed = path == "/api/reconcile" or path.startswith("/api/cases/")
         if role == "connector":
-            allowed = path in {"/api/evidence", "/api/connectors/heartbeat"} or (row["source"] == "odoo" and path == "/api/jobs/import")
+            allowed = path in {"/api/evidence", "/api/connectors/heartbeat"} or (
+                row["source"] == "odoo" and path in {"/api/jobs/import", "/api/erp/records/import"})
         if not allowed:
             raise HTTPException(403, "Credential role does not permit this operation")
     elif role == "connector" and path != "/api/me":
@@ -560,6 +562,161 @@ def import_job(body: JobIn, tid=Depends(tenant), db=Depends(get_db)):
                    (jid, tid, reference, body.title, stamp()))
         audit(db, tid, 'job', jid, 'imported', {'external_ref': reference, 'source': 'odoo'})
         return within_tenant(db, 'jobs', tid, jid)
+
+
+class ERPGrantIn(Input):
+    credential_id: str = Field(min_length=1, max_length=80)
+    company_id: int = Field(ge=1, strict=True)
+    models: list[str] = Field(min_length=1, max_length=30)
+
+
+class ERPRecordIn(Input):
+    instance: str = Field(min_length=1, max_length=128)
+    company_id: int = Field(ge=1, strict=True)
+    model: str = Field(min_length=2, max_length=80)
+    record_id: int = Field(ge=1, strict=True)
+    state: str = Field(min_length=1, max_length=80)
+    source_modified_at: datetime
+
+
+@app.get("/api/erp/catalog")
+def erp_catalog(tid=Depends(tenant_admin)):
+    """Static supported model metadata; NOT assertions of live Odoo modules."""
+    return [{"model": k, "domain": v[0], "fields": list(v[1]),
+             "status": "adapter_supported_not_connected"} for k,v in MODEL_CONTRACTS.items()]
+
+
+@app.get("/api/erp/grants")
+def erp_grants(tid=Depends(tenant_admin), db=Depends(get_db)):
+    return all_rows(db, "SELECT g.credential_id,c.name AS connector,g.company_id,g.model,g.created_at "
+                    "FROM erp_grants g JOIN credentials c ON c.id=g.credential_id AND c.tenant_id=g.tenant_id "
+                    "WHERE g.tenant_id=? ORDER BY c.name,g.company_id,g.model", (tid,))
+
+
+@app.post("/api/erp/grants", status_code=201)
+def erp_add_grants(body: ERPGrantIn, tid=Depends(tenant_admin), db=Depends(get_db)):
+    """Administrator authorizes one company's model allowlist for one connector."""
+    models = set(body.models)
+    if len(models) != len(body.models) or models - MODEL_NAMES:
+        raise HTTPException(422, "Unsupported or duplicate ERP models")
+    with transaction(db):
+        cred = one(db, "SELECT id,role,source,scope,revoked_at,expires_at FROM credentials "
+                       "WHERE tenant_id=? AND id=?", (tid, body.credential_id))
+        if (not cred or cred["role"] != "connector" or cred["source"] != "odoo"
+            or not cred["scope"] or cred["revoked_at"]
+            or (cred["expires_at"] and cred["expires_at"] <= stamp())):
+            raise HTTPException(422, "Active instance-scoped Odoo connector credential required")
+        for model in sorted(models):
+            db.execute("INSERT INTO erp_grants(tenant_id,credential_id,company_id,model,created_at) "
+                       "VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING",
+                       (tid, body.credential_id, body.company_id, model, stamp()))
+        audit(db, tid, "erp_grant", body.credential_id, "authorized",
+              {"company_id": body.company_id, "models": sorted(models), "instance": cred["scope"]})
+    return {"authorized": sorted(models), "company_id": body.company_id,
+            "connector_id": body.credential_id}
+
+
+@app.delete("/api/erp/grants/{credential_id}/{company_id}/{model}")
+def erp_revoke_grant(credential_id: str, company_id: int, model: str,
+                     tid=Depends(tenant_admin), db=Depends(get_db)):
+    if company_id <= 0 or model not in MODEL_NAMES:
+        raise HTTPException(422, "Invalid company or ERP model")
+    with transaction(db):
+        result = db.execute("DELETE FROM erp_grants WHERE tenant_id=? AND credential_id=? "
+                            "AND company_id=? AND model=?", (tid, credential_id, company_id, model))
+        if not result.rowcount:
+            raise HTTPException(404, "ERP grant not found")
+        audit(db, tid, "erp_grant", credential_id, "revoked",
+              {"company_id": company_id, "model": model})
+    return {"revoked": True}
+
+
+@app.post("/api/erp/records/import", status_code=201)
+def erp_import_state(body: ERPRecordIn, tid=Depends(tenant), db=Depends(get_db)):
+    """Read-only provider mirror, source-only auth and append-on-change history.
+
+    This is not a write to Odoo and does not imply fiscal or physical completion.
+    """
+    if db.actor_role != "connector" or db.actor_source != "odoo":
+        raise HTTPException(403, "Odoo connector credential required")
+    if (body.instance != db.actor_scope or not NAMESPACE.fullmatch(body.instance)):
+        raise HTTPException(403, "Odoo source instance scope mismatch")
+    if body.model not in MODEL_NAMES or not STATE.fullmatch(body.state):
+        raise HTTPException(422, "Unsupported Odoo model or state")
+    modified = normalized_time(body.source_modified_at)
+    if datetime.fromisoformat(modified) > datetime.now(timezone.utc) + timedelta(minutes=5):
+        raise HTTPException(422, "Source modification time is in the future")
+    with transaction(db):
+        grant = one(db, "SELECT model FROM erp_grants WHERE tenant_id=? AND credential_id=? "
+                        "AND company_id=? AND model=?",
+                    (tid, db.actor_id, body.company_id, body.model))
+        if not grant:
+            raise HTTPException(403, "Model/company not granted for this connector")
+        old = one(db, "SELECT * FROM erp_records WHERE tenant_id=? AND instance=? "
+                      "AND company_id=? AND model=? AND record_id=?",
+                  (tid, body.instance, body.company_id, body.model, body.record_id))
+        now = stamp()
+        if old and old["source_modified_at"] > modified:
+            return {"id": old["id"], "model": body.model, "action": "older_ignored"}
+        if old and old["source_modified_at"] == modified and old["state"] != body.state:
+            raise HTTPException(409, "Conflicting state for the same Odoo modification timestamp")
+        action = "unchanged"
+        if not old:
+            rid = uid()
+            db.execute("INSERT INTO erp_records(id,tenant_id,instance,company_id,model,record_id,"
+                       "state,source_modified_at,first_seen,last_seen) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                       (rid, tid, body.instance, body.company_id, body.model, body.record_id,
+                        body.state, modified, now, now))
+            action = "created"
+        else:
+            rid = old["id"]
+            if old["state"] != body.state:
+                action = "changed"
+            db.execute("UPDATE erp_records SET state=?,source_modified_at=?,last_seen=? "
+                       "WHERE id=? AND tenant_id=?", (body.state, modified, now, rid, tid))
+        if action != "unchanged":
+            db.execute("INSERT INTO erp_state_changes(id,tenant_id,erp_record_id,previous_state,"
+                       "current_state,source_modified_at,received_at) VALUES(?,?,?,?,?,?,?)",
+                       (uid(), tid, rid, old["state"] if old else None, body.state, modified, now))
+            audit(db, tid, "erp_record", rid, action,
+                  {"model": body.model, "instance": body.instance,
+                   "company_id": body.company_id, "record_id": body.record_id})
+        return {"id": rid, "model": body.model, "action": action}
+
+
+@app.get("/api/erp/summary")
+def erp_summary(tid=Depends(tenant_admin), db=Depends(get_db)):
+    return all_rows(db,
+        "SELECT instance,company_id,model,state,count(*) AS records,max(last_seen) AS last_seen "
+        "FROM erp_records WHERE tenant_id=? "
+        "GROUP BY instance,company_id,model,state ORDER BY instance,company_id,model,state", (tid,))
+
+
+@app.get("/api/erp/records")
+def erp_records(tid=Depends(tenant_admin), db=Depends(get_db),
+                model: str | None = Query(default=None), company_id: int | None = Query(default=None, ge=1),
+                limit: int = Query(default=100, ge=1, le=500), offset: int = Query(default=0, ge=0)):
+    if model is not None and model not in MODEL_NAMES:
+        raise HTTPException(422, "Unsupported ERP model")
+    conditions, values = ["tenant_id=?"], [tid]
+    if model:
+        conditions.append("model=?"); values.append(model)
+    if company_id is not None:
+        conditions.append("company_id=?"); values.append(company_id)
+    return all_rows(db, "SELECT id,instance,company_id,model,record_id,state,source_modified_at,"
+                    "first_seen,last_seen FROM erp_records WHERE " + " AND ".join(conditions) +
+                    " ORDER BY last_seen DESC,id DESC LIMIT ? OFFSET ?", (*values, limit, offset))
+
+
+@app.get("/api/erp/records/{record_uuid}/history")
+def erp_history(record_uuid: str, tid=Depends(tenant_admin), db=Depends(get_db),
+                limit: int = Query(default=100,ge=1,le=500)):
+    existing = one(db, "SELECT id FROM erp_records WHERE tenant_id=? AND id=?", (tid, record_uuid))
+    if not existing:
+        raise HTTPException(404, "ERP record not found in this tenant")
+    return all_rows(db, "SELECT previous_state,current_state,source_modified_at,received_at "
+                    "FROM erp_state_changes WHERE tenant_id=? AND erp_record_id=? "
+                    "ORDER BY received_at DESC,id DESC LIMIT ?", (tid, record_uuid, limit))
 
 
 @app.get('/api/cases/{case_id}')
