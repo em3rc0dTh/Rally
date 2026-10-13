@@ -29,6 +29,10 @@ Do not attach untrusted workloads to the stack's private network. Proxy-header t
 
 Configure external alerts for readiness, repeated 5xx/429, worker failures, stale/degraded connectors, host disk capacity, PostgreSQL volume growth and backup age. Docker health alone does not restart an unhealthy but running container. Choose an operator/supervisor escalation policy.
 
+Migration v5 marks existing work orders as `manual` by default. For an MK0 or 0.2 database that has already imported Odoo references, **inspect each matching record and its provenance before explicitly changing its `source` to `odoo`**. The import endpoint returns 409 for legacy/manual records rather than silently taking them over. New imports require `odoo:INSTANCE:sale.order:POSITIVE_ID`; manual work orders cannot occupy that namespace. Keep `ODOO_INSTANCE` stable and limited to letters, digits, dot, underscore and dash.
+
+Traccar coverage now reports degraded when the provider returns no positions, when mapped positions are stale/invalid, or when devices are unmapped. `TRACCAR_MAX_POSITION_AGE_SECONDS` defaults to 300; polling health is not proof of physical execution.
+
 The worker rereads durable business state after restart. No scheduler queue is lost; interrupted transactions roll back. Odoo polling performs a complete keyset traversal and Traccar replays current positions; neither mutates the ERP. RFID recovery uses its persistent spool.
 
 ## Connector services

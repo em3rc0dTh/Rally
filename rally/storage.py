@@ -195,6 +195,11 @@ def initialize(path=None):
                                    f'FOREIGN KEY(tenant_id,{column}) REFERENCES {parent}(tenant_id,id)')
             if 4 not in versions:
                 db.execute('INSERT INTO schema_migrations(version) VALUES(4)')
+            # Version 5: explicit origin ownership prevents provider credentials
+            # from claiming manually created or legacy work orders.
+            if 5 not in versions:
+                db.execute("ALTER TABLE jobs ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
+                db.execute('INSERT INTO schema_migrations(version) VALUES(5)')
 
 
 def get_db():

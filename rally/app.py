@@ -14,6 +14,7 @@ from uuid import uuid4
 import json
 import os
 import logging
+import re
 from datetime import timedelta
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -213,6 +214,8 @@ def create_job(body: JobIn, tid: str = Depends(tenant), db=Depends(get_db)):
     ref, title = body.external_ref.strip(), body.title.strip()
     if not ref or not title:
         raise HTTPException(422, "Reference and title are required")
+    if ref.lower().startswith("odoo:"):
+        raise HTTPException(422, "The odoo: namespace is reserved for verified ERP imports")
     try:
         db.execute("BEGIN IMMEDIATE")
         db.execute("INSERT INTO jobs(id,tenant_id,external_ref,title,created_at) VALUES(?,?,?,?,?)",
@@ -455,16 +458,26 @@ def revoke_credential(credential_id: str, tid=Depends(tenant_admin), db=Depends(
 def import_job(body: JobIn, tid=Depends(tenant), db=Depends(get_db)):
     if db.actor_role != 'admin' and not (db.actor_role == 'connector' and db.actor_source == 'odoo'):
         raise HTTPException(403, 'Odoo connector or tenant administrator required')
+    # A connector must not overwrite a manually entered work order by choosing
+    # its external reference. Reserve a structured, traceable Odoo namespace.
+    reference = body.external_ref.strip()
+    if not re.fullmatch(r"odoo:[A-Za-z0-9_.-]{1,128}:sale[.]order:[1-9][0-9]{0,18}", reference):
+        raise HTTPException(422, "Expected odoo:INSTANCE:sale.order:POSITIVE_ID reference")
     with transaction(db):
-        old = one(db, 'SELECT * FROM jobs WHERE tenant_id=? AND external_ref=?', (tid, body.external_ref))
+        old = one(db, 'SELECT * FROM jobs WHERE tenant_id=? AND external_ref=?', (tid, reference))
         if old:
+            if old['source'] != 'odoo':
+                # Existing MK0 rows must be explicitly checked and assigned
+                # provenance before a connector can take control of them.
+                raise HTTPException(409, 'Reference belongs to a manual or legacy work order; review provenance')
             if old['title'] != body.title:
                 db.execute('UPDATE jobs SET title=? WHERE id=? AND tenant_id=?', (body.title, old['id'], tid))
                 audit(db, tid, 'job', old['id'], 'import_updated')
             return within_tenant(db, 'jobs', tid, old['id'])
         jid = uid()
-        db.execute('INSERT INTO jobs(id,tenant_id,external_ref,title,created_at) VALUES(?,?,?,?,?)', (jid, tid, body.external_ref, body.title, stamp()))
-        audit(db, tid, 'job', jid, 'imported', {'external_ref': body.external_ref})
+        db.execute("INSERT INTO jobs(id,tenant_id,external_ref,title,created_at,source) VALUES(?,?,?,?,?,'odoo')",
+                   (jid, tid, reference, body.title, stamp()))
+        audit(db, tid, 'job', jid, 'imported', {'external_ref': reference, 'source': 'odoo'})
         return within_tenant(db, 'jobs', tid, jid)
 
 

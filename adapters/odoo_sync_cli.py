@@ -6,6 +6,7 @@ Full keyset pagination and title upserts; no deletes or automatic completion.
 """
 import asyncio
 import os
+import re
 import httpx
 from adapters.odoo_json2 import OdooConfig, OdooJSON2
 
@@ -13,8 +14,10 @@ def map_confirmed_sale(order: dict, database: str) -> dict:
     if order.get("state") not in {"sale", "done"}:
         raise ValueError("Only confirmed sales may create operational intent")
     oid = order.get("id")
-    if not isinstance(oid, int) or oid < 1:
+    if isinstance(oid, bool) or not isinstance(oid, int) or oid < 1:
         raise ValueError("Odoo sale order ID missing")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", database):
+        raise ValueError("ODOO_INSTANCE must be a stable alphanumeric namespace (dot, dash, underscore allowed)")
     return {
         "external_ref": "odoo:" + database + ":sale.order:" + str(oid),
         "title": "Sales order " + str(order.get("name") or oid),
