@@ -14,6 +14,8 @@ Rally links work-order intent to equipment custody, immutable-by-API observation
 - Odoo confirmed-sale keyset import with explicit company scope; scheduled Odoo/Traccar polling with bounded retry; disk-spooled RFID edge ingestion.
 - Production Compose: private PostgreSQL/API, Caddy TLS, non-root application, readiness, backup/restore and legacy data migration.
 
+**Odoo import requires an explicitly configured work-order domain** and will not treat all confirmed sales as jobs. See the integration guide.
+
 **Hardening after 0.2:** connector credentials can be scoped to one Odoo instance; imports cannot take over manual/legacy work orders; Traccar coverage checks data freshness and absent mapped devices. Database schema upgrades through version 6. See [post-0.2 review](docs/12-post-release-review.md) for upgrade actions and unverified risks.
 
 **Delivery status:** source implementation and deployment configuration. This release was produced **without executing tests**, as requested. It is not a certification of a live production environment, hardware, load capacity or vendor compatibility. Review [the release record](docs/11-release-0.2.md) and [operations guide](docs/10-production-operations.md) before customer cutover.

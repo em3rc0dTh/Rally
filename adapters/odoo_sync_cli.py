@@ -5,6 +5,7 @@ Stable references prevent duplicate import across repeated invocations.
 Full keyset pagination and title upserts; no deletes or automatic completion.
 """
 import asyncio
+import json
 import os
 import re
 import httpx
@@ -32,6 +33,17 @@ async def main():
     companies = [int(x.strip()) for x in os.environ['ODOO_COMPANY_IDS'].split(',')]
     if not companies or any(x < 1 for x in companies):
         raise ValueError('Explicit positive Odoo company IDs required')
+    # A confirmed sales order is NOT necessarily a field-service work order.
+    # Fail closed unless the customer explicitly identifies the subset of
+    # commercial sales that represent jobs (e.g. a custom boolean/tag field).
+    configured = os.environ.get('ODOO_WORKORDER_DOMAIN_JSON', '')
+    if not configured.strip():
+        raise ValueError('ODOO_WORKORDER_DOMAIN_JSON is required; do not import all sales')
+    selector = json.loads(configured)
+    if (not isinstance(selector, list) or not selector or
+        any(not isinstance(term, list) or len(term) != 3 or
+            not isinstance(term[0], str) or not term[0] for term in selector)):
+        raise ValueError('ODOO_WORKORDER_DOMAIN_JSON must be a nonempty list of simple Odoo domain terms')
     odoo = OdooJSON2(OdooConfig(os.environ['ODOO_URL'], database, os.environ['ODOO_API_KEY']))
     rally = RallyClient()
     cursor, imported = 0, 0
@@ -39,11 +51,16 @@ async def main():
     # confirmed after a prior cycle. Never interprets ERP status as physical completion.
     while True:
         orders = await odoo.search_read('sale.order',
-            [['state', 'in', ['sale', 'done']], ['company_id', 'in', companies], ['id', '>', cursor]],
+            [['state', 'in', ['sale', 'done']], ['company_id', 'in', companies], ['id', '>', cursor], *selector],
             ['id', 'name', 'state', 'company_id'], limit=500)
         if not orders:
             break
         for order in orders:
+            # Odoo JSON-2 may return a many2one as [id, display_name].
+            raw_company = order.get('company_id')
+            company_id = raw_company[0] if isinstance(raw_company, (list, tuple)) and raw_company else raw_company
+            if type(company_id) is not int or company_id not in companies:
+                raise ValueError('Odoo returned a sale outside the explicitly permitted company IDs')
             job = map_confirmed_sale(order, (os.getenv('ODOO_INSTANCE') or database))
             await rally.post('jobs/import', job)
             imported += 1

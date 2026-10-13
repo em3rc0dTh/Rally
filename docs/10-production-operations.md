@@ -95,3 +95,8 @@ It creates a named administrator, records a platform-recovery audit action and o
 ## Operational boundaries
 
 No destructive retention cron is provided: custody, idempotency and evidence history are business records. Define customer-approved archival/deletion rules first. The code does not claim SSO/MFA, immutable storage, managed HA/PITR, hardware attestation, commercial licensing or live integration certification.
+
+
+### Field-service import selector
+
+Before provisioning an Odoo connector, configure `ODOO_WORKORDER_DOMAIN_JSON` with the customer's agreed filter that identifies actual field-service orders. A confirmed sales order must not implicitly be treated as a physical work order. The new importer fails closed when no nonempty simple domain selector is supplied and rejects records outside `ODOO_COMPANY_IDS`. The example `x_rally_work_order` field is not an Odoo standard: implement or substitute an actual field in the customer's ERP and check domain permissions, multi-company separation and results before enabling supervised polling.

@@ -58,3 +58,8 @@ Core exception recovery uses durable database state, ownership, notes and period
 Issue an Odoo connector identity with `role=connector`, `source=odoo` and `scope=ODOO_INSTANCE` (the exact instance namespace sent by the importer). Existing unscoped Odoo credentials cannot import; reissue and revoke them. `/api/jobs/import` accepts only `odoo:INSTANCE:sale.order:POSITIVE_ID`, and does not overwrite manually owned or legacy rows. New manual jobs cannot use the reserved `odoo:` namespace. Legacy imported records require operator-reviewed provenance reassignment before sync can resume.
 
 Traccar health is **degraded** when no mapped device positions arrive, mapped devices are absent, fix times are old, `valid` is not explicitly `true`, or malformed observations are encountered. `TRACCAR_MAX_POSITION_AGE_SECONDS` is the configurable age threshold (default 300s). This covers reported positioning quality, **not** guaranteed service completion or asset presence.
+
+
+### Required work-order selection (fail-closed)
+
+A confirmed Odoo sale may contain stock-only goods and is **not necessarily a field-service job**. Configure `ODOO_WORKORDER_DOMAIN_JSON` as a nonempty JSON array of simple Odoo domain clauses, explicitly agreed with the customer and supported by their installed Odoo edition/modules. Example: `[["x_rally_work_order","=",true]]` for a customer-owned Boolean field. Without this selector, the Odoo importer refuses to run. The importer rechecks returned `company_id` values against the configured company allowlist. Real field semantics must be verified against the target Odoo system.
