@@ -39,6 +39,7 @@ jobs:
         env:
           RALLY_ADMIN_KEY: "integration-only-abcdefghijklmnopqrstuv1234567890"
           POSTGRES_PASSWORD: rally-ci-only
+          RALLY_APP_PASSWORD: rally-ci-independent
           RALLY_DOMAIN: rally.example.com
           ACME_EMAIL: ci@example.com
         run: docker compose -f compose.production.yaml config --quiet

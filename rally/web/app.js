@@ -89,7 +89,7 @@ $('logout').onclick=()=>disconnect();$('refresh').onclick=()=>busy($('refresh'),
 $('reconcile').onclick=()=>busy($('reconcile'),async()=>{const r=await api('reconcile','POST');await refresh();notice(`Reconciled ${r.active_custody_scanned} assignments; ${r.open_conditions} conditions.`);});
 document.addEventListener('click',event=>{
  const b=event.target.closest('button');if(!b)return;
- if(b.dataset.return)busy(b,async()=>{await api('custody/return','POST',{custody_id:b.dataset.return,confirmed_by:identity.name},true);await refresh();notice('Return recorded. Automatic reconciliation will clear resolved conditions.');});
+ if(b.dataset.return)busy(b,async()=>{await api('custody/return','POST',{custody_id:b.dataset.return},true);await refresh();notice('Return recorded. Automatic reconciliation will clear resolved conditions.');});
  if(b.dataset.complete)busy(b,async()=>{await api('jobs/'+b.dataset.complete+'/complete','POST');await refresh();});
  if(b.dataset.case)busy(b,async()=>{selectedCase=b.dataset.case;const c=await api('cases/'+selectedCase);$('case-detail').textContent=[c.description,'State: '+c.state,'Condition: '+c.fingerprint,'Owner: '+(c.owner_id||'Unassigned'),...c.notes.map(n=>n.created_at+' · '+n.actor_id+'\n'+n.note)].join('\n\n');$('case-dialog').showModal();});
  if(b.dataset.revoke&&confirm('Revoke this credential?'))busy(b,async()=>{const id=b.dataset.revoke;await api('credentials/'+id+'/revoke','POST');if(id===identity.id)disconnect('Your credential was revoked.');else await loadCredentials();});

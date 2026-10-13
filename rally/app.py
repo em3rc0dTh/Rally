@@ -60,7 +60,7 @@ class IssueIn(Input):
 
 class ReturnIn(Input):
     custody_id: str
-    confirmed_by: str = Field(min_length=1, max_length=250)
+    confirmed_by: str | None = Field(default=None, min_length=1, max_length=250)
 
 class EvidenceIn(Input):
     asset_id: str | None = None
@@ -278,12 +278,19 @@ def return_asset(body: ReturnIn, idempotency_key: str | None = Header(default=No
         row = within_tenant(db, "custody", tid, body.custody_id)
         if row["state"] != "active":
             raise HTTPException(409, "Custody has already ended")
-        if not body.confirmed_by.strip():
-            raise HTTPException(422, "Confirmation actor is required")
+        # The authenticated credential is the only credible acting identity.
+        # A client-supplied name is never accepted as proof of another person.
+        operator = one(db, "SELECT name FROM credentials WHERE id=? AND tenant_id=?",
+                       (db.actor_id, tid))
+        if not operator:
+            raise HTTPException(403, "An active named credential is required")
+        if body.confirmed_by and body.confirmed_by.strip() != operator["name"]:
+            raise HTTPException(422, "Return confirmation name must match the signed-in operator")
         db.execute("UPDATE custody SET state='returned',returned_at=? WHERE tenant_id=? AND id=?",
                    (stamp(), tid, body.custody_id))
         audit(db, tid, "custody", body.custody_id, "returned",
-              {"confirmed_by": body.confirmed_by.strip()})
+              {"confirmed_by": operator["name"], "credential_id": db.actor_id,
+               "receiver_acceptance_verified": False})
         return within_tenant(db, "custody", tid, body.custody_id)
     return perform(db, tid, "return", idempotency_key, data, action)
 

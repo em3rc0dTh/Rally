@@ -26,7 +26,7 @@ El resultado de CI no sustituye un ensayo sobre una copia de la base de datos de
 | Obligación previa al go-live | Cómo verificar | Responsable |
 | --- | --- | --- |
 | DNS + HTTPS/certificado válido | Navegador y verificación TLS contra dominio propio | Operaciones |
-| Secretos únicos de producción | Vault y `ops.preflight`, sin publicar valores | Seguridad/operaciones |
+| Secretos únicos de producción | Bootstrap PostgreSQL separado del usuario no-superuser `rally_app`; Vault y `ops.preflight`, sin publicar valores | Seguridad/operaciones |
 | Migración desde copia real | Replay de migraciones 1–6, integridad y reconciliación de datos | DBA |
 | Conectividad Odoo/edición/empresa | Importación controlada de órdenes reales, contrato de filtrado explícito | Integraciones |
 | GPS/Traccar | Posiciones reales con `valid=true`, frescura, mapeos y ausencias | Integraciones |
@@ -76,3 +76,8 @@ La **funcionalidad de custodia y órdenes** es el alcance inicial que podría sa
 **NO-GO** cuando no hay servidor/dominio, credenciales reales, respaldo recuperable, contrato de fuente de datos Odoo o evaluación legal correspondiente.
 
 Esta distinción es esencial para evitar confundir "código publicable" con "sistema operacionalmente certificado".
+
+
+## Endurecimiento sin ejecución de pruebas
+
+El runtime productivo usa el rol PostgreSQL `rally_app`, con clave independiente del bootstrap de PostgreSQL. La base nueva lo crea mediante `ops/initdb/01-runtime-role.sh`; volumen PostgreSQL preexistente requiere una migración de roles revisada, nunca borrado de volumen. La API rechaza credenciales de base con privilegios globales. Los eventos de devolución se atribuyen al actor autenticado, no a un nombre arbitrario enviado por el navegador, y el sistema no considera esa acción equivalente a una firma de recepción independiente. Estos cambios deberán entrar en la campaña de pruebas posterior a esta entrega.
