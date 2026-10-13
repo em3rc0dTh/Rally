@@ -44,3 +44,5 @@ jobs:
         run: docker compose -f compose.production.yaml config --quiet
       - name: Build application container
         run: docker build -t rally-ci:latest .
+      - name: Boot disposable API and reconciliation worker
+        run: bash ops/smoke_local.sh

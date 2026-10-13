@@ -16,6 +16,7 @@ Este documento separa explícitamente los controles que se pueden comprobar en G
 | Restricción de importación Odoo por instancia | Prueba negativa entre namespaces | Implementado en CI |
 | Filtro explícito ventas→trabajos | Prueba negativa cuando falta configuración | Implementado en CI |
 | Dockerfile y Compose | Compilación de imagen y `docker compose config` | Implementado en CI |
+| Stack local API + worker | Compose desechable, `/readyz` y autenticación | Smoke check incluido en CI |
 | Preflight de configuración | `python -m ops.preflight` | Código implementado, ejecutar con secretos reales |
 
 El resultado de CI no sustituye un ensayo sobre una copia de la base de datos de clientes ni valida dispositivos físicos. Revisar siempre el run correspondiente al SHA exacto que se va a distribuir.
