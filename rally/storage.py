@@ -185,7 +185,7 @@ def initialize(path=None):
         with transaction(db):
             db.execute('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)')
             versions = {r['version'] for r in db.execute('SELECT version FROM schema_migrations').fetchall()}
-            supported = set(range(1, 8))
+            supported = set(range(1, 9))
             if versions - supported:
                 raise RuntimeError('Database schema is newer than this Rally build; use an approved matching release')
             for version, sql in enumerate(MIGRATIONS, 1):
@@ -248,6 +248,24 @@ def initialize(path=None):
                 for statement in statements:
                     db.execute(statement)
                 db.execute('INSERT INTO schema_migrations(version) VALUES(7)')
+
+            # Version 8: only tenant administrators may opt in to state-age rules.
+            if 8 not in versions:
+                db.execute("""CREATE TABLE erp_policies (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    instance TEXT NOT NULL,
+                    company_id INTEGER NOT NULL,
+                    model TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    max_age_seconds INTEGER NOT NULL,
+                    severity TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(tenant_id,instance,company_id,model,state)
+                )""")
+                db.execute("CREATE INDEX idx_erp_policies_tenant ON erp_policies(tenant_id,enabled)")
+                db.execute('INSERT INTO schema_migrations(version) VALUES(8)')
 
 
 def get_db():

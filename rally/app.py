@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from rally.storage import all_rows, get_db, initialize, one, transaction, IntegrityError, OperationalError
 from rally.security import GuardMiddleware, validate_environment
 from rally.erp_contract import MODEL_CONTRACTS, MODEL_NAMES, STATE, NAMESPACE
+from rally.erp_policies import policy_conditions, may_resolve_erp_case
 
 def stamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -420,6 +421,8 @@ def reconcile(tid: str = Depends(tenant), db=Depends(get_db)):
                 conditions["completed_job:" + item["id"]] = (
                     "closed_job_active_custody", "critical",
                     "Work order is completed but assigned equipment has not been returned")
+        # Enterprise cases require explicit tenant-admin rules and fresh source state.
+        conditions.update(policy_conditions(db, tid, datetime.now(timezone.utc)))
         existing = {c["fingerprint"]: c for c in
                     all_rows(db, "SELECT * FROM cases WHERE tenant_id=?", (tid,))}
         for fp, (kind, severity, description) in conditions.items():
@@ -438,6 +441,14 @@ def reconcile(tid: str = Depends(tenant), db=Depends(get_db)):
                 db.execute("UPDATE cases SET state='resolved',resolved_at=? WHERE tenant_id=? AND fingerprint=?",
                            (now, tid, fp))
                 audit(db, tid, "case", case["id"], "resolved", {"reason": "Custody returned; authoritative condition cleared", "fingerprint": fp})
+            elif (case["state"] in {"open", "acknowledged"} and fp not in conditions
+                  and case["kind"] == "erp_state_overdue"
+                  and may_resolve_erp_case(db, tid, fp, datetime.now(timezone.utc))):
+                db.execute("UPDATE cases SET state='resolved',resolved_at=? "
+                           "WHERE tenant_id=? AND fingerprint=?", (now, tid, fp))
+                audit(db, tid, "case", case["id"], "resolved",
+                      {"reason": "Approved ERP state rule no longer applies to the fresh source record "
+                       "or was explicitly disabled", "fingerprint": fp})
         return {"active_custody_scanned": len(active), "open_conditions": len(conditions)}
 
 @app.get("/api/cases")
@@ -717,6 +728,70 @@ def erp_history(record_uuid: str, tid=Depends(tenant_admin), db=Depends(get_db),
     return all_rows(db, "SELECT previous_state,current_state,source_modified_at,received_at "
                     "FROM erp_state_changes WHERE tenant_id=? AND erp_record_id=? "
                     "ORDER BY received_at DESC,id DESC LIMIT ?", (tid, record_uuid, limit))
+
+
+class ERPPolicyIn(Input):
+    instance: str = Field(min_length=1, max_length=128)
+    company_id: int = Field(ge=1, strict=True)
+    model: str = Field(min_length=2, max_length=80)
+    state: str = Field(min_length=1, max_length=80)
+    max_age_seconds: int = Field(ge=60, le=31536000, strict=True)
+    severity: Literal["warning", "critical"] = "warning"
+
+
+@app.get("/api/erp/policies")
+def erp_list_policies(tid=Depends(tenant_admin), db=Depends(get_db)):
+    return all_rows(db, "SELECT * FROM erp_policies WHERE tenant_id=? "
+                    "ORDER BY created_at DESC,id DESC", (tid,))
+
+
+@app.post("/api/erp/policies", status_code=201)
+def erp_add_policy(body: ERPPolicyIn, tid=Depends(tenant_admin), db=Depends(get_db)):
+    if (not NAMESPACE.fullmatch(body.instance) or body.model not in MODEL_NAMES
+        or not STATE.fullmatch(body.state)):
+        raise HTTPException(422, "Unsupported ERP policy namespace, model or state")
+    with transaction(db):
+        credential_has_grant = one(db,
+            "SELECT g.credential_id FROM erp_grants g JOIN credentials c "
+            "ON c.tenant_id=g.tenant_id AND c.id=g.credential_id "
+            "WHERE g.tenant_id=? AND c.scope=? AND g.company_id=? AND g.model=? "
+            "AND c.role='connector' AND c.source='odoo' AND c.revoked_at IS NULL "
+            "AND (c.expires_at IS NULL OR c.expires_at>?)",
+            (tid, body.instance, body.company_id, body.model, stamp()))
+        if not credential_has_grant:
+            raise HTTPException(422, "Approve an active Odoo connector grant before defining ERP rules")
+        current = one(db, "SELECT id FROM erp_policies WHERE tenant_id=? AND instance=? "
+                         "AND company_id=? AND model=? AND state=?",
+                      (tid, body.instance, body.company_id, body.model, body.state))
+        if current:
+            db.execute("UPDATE erp_policies SET max_age_seconds=?,severity=?,enabled=1 "
+                       "WHERE id=? AND tenant_id=?",
+                       (body.max_age_seconds,body.severity,current["id"],tid))
+            pid = current["id"]
+        else:
+            pid = uid()
+            db.execute("INSERT INTO erp_policies(id,tenant_id,instance,company_id,model,state,"
+                       "max_age_seconds,severity,enabled,created_at) VALUES(?,?,?,?,?,?,?,?,1,?)",
+                       (pid,tid,body.instance,body.company_id,body.model,body.state,
+                        body.max_age_seconds,body.severity,stamp()))
+        audit(db, tid, "erp_policy", pid, "configured",
+              {"instance":body.instance,"company_id":body.company_id,"model":body.model,
+               "state":body.state,"max_age_seconds":body.max_age_seconds,"severity":body.severity})
+    return {"id":pid,"enabled":True}
+
+
+@app.post("/api/erp/policies/{policy_id}/disable")
+def erp_disable_policy(policy_id: str, tid=Depends(tenant_admin), db=Depends(get_db)):
+    with transaction(db):
+        policy = one(db,"SELECT id,enabled FROM erp_policies WHERE tenant_id=? AND id=?",
+                     (tid,policy_id))
+        if not policy:
+            raise HTTPException(404,"ERP policy not found for tenant")
+        if policy["enabled"]:
+            db.execute("UPDATE erp_policies SET enabled=0 WHERE id=? AND tenant_id=?",
+                       (policy_id,tid))
+            audit(db,tid,"erp_policy",policy_id,"disabled")
+    return {"disabled":True}
 
 
 @app.get('/api/cases/{case_id}')
