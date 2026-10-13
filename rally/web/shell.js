@@ -318,9 +318,9 @@
     byId('geo-map-head').textContent=geoRows.length?
       geoRows.length+' device fix'+(geoRows.length===1?'':'es')+' · stored observations':
       'No GPS data · source unverified';
-    button.disabled=!geoRows.length||!tileAllowed;
+    button.disabled=!tileAllowed;
     byId('geo-tile-state').textContent=tileAllowed?
-      'Street tiles are loaded only when you choose Show street map. Map provider may receive approximate location.':
+      'Street tiles load only by user action. Without devices the map starts at a neutral world view; real device coordinates may be disclosed if available.':
       'Street map disabled here; tenant locations remain in the private coordinate preview.';
     if(!map)canvas.classList.remove('has-tiles');
     else updateMapMarkers();
@@ -343,6 +343,7 @@
           safe(row.source)+' · '+safe(row.quality)+'<br>'+safe(asLocal(row.observed_at))).addTo(markers);
     });
     if(bounds.length)map.fitBounds(bounds,{padding:[35,35],maxZoom:14});
+    else map.setView([0,0],2);
     setTimeout(()=>map?.invalidateSize(),100);
   }
   async function loadLeaflet(){
@@ -361,7 +362,7 @@
     return !!window.L;
   }
   byId('geo-tiles').onclick=async()=>{
-    if(!geoRows.length||!tileAllowed)return;
+    if(!tileAllowed)return;
     const btn=byId('geo-tiles');btn.disabled=true;btn.textContent='Loading map…';
     try{
       if(!map){
