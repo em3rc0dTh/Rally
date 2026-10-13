@@ -51,3 +51,10 @@ An event is committed to disk before a `spooled` acknowledgment. It is deleted o
 `GET /api/connectors` shows never-seen, stale, degraded or current polling coverage. Heartbeat status is not proof of new physical observations. Use sensor timestamps/validity in the evidence ledger to assess actual observation quality.
 
 Core exception recovery uses durable database state, ownership, notes and periodic reconciliation. It does not depend on Temporal. The `workflows/` directory remains an optional read-only human-review example; install `uv sync --extra temporal` to use it against your Temporal server. The example is not enabled or represented as production orchestration.
+
+
+## Post-0.2 source ownership and Odoo connector scopes
+
+Issue an Odoo connector identity with `role=connector`, `source=odoo` and `scope=ODOO_INSTANCE` (the exact instance namespace sent by the importer). Existing unscoped Odoo credentials cannot import; reissue and revoke them. `/api/jobs/import` accepts only `odoo:INSTANCE:sale.order:POSITIVE_ID`, and does not overwrite manually owned or legacy rows. New manual jobs cannot use the reserved `odoo:` namespace. Legacy imported records require operator-reviewed provenance reassignment before sync can resume.
+
+Traccar health is **degraded** when no mapped device positions arrive, mapped devices are absent, fix times are old, `valid` is not explicitly `true`, or malformed observations are encountered. `TRACCAR_MAX_POSITION_AGE_SECONDS` is the configurable age threshold (default 300s). This covers reported positioning quality, **not** guaranteed service completion or asset presence.

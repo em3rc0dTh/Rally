@@ -44,3 +44,8 @@ Docker is not available in the implementation environment, so the container buil
 Provision and validate a real environment, provider accounts/mappings, off-host backup policy and operator monitoring. SSO/MFA, enterprise HA/PITR, physical device attestation, billing, arbitrary ERP writes, immutable external audit, formal retention and commercial/legal clearance are outside this custody implementation. Optional Temporal is explicitly a read-only example, not hidden unfinished core recovery.
 
 **Release classification:** implemented source and deployable configuration, reviewed statically and packaged; not production-certified through execution.
+
+
+## Subsequent corrective follow-up
+
+Later commits after the original delivery tightened import ownership, per-instance Odoo connector permissions and Traccar evidence freshness. The historical verification claims above apply only to the original 0.2 commit; the follow-up was reviewed statically without executing tests. See [post-release review](12-post-release-review.md) for upgrade requirements and known gaps.

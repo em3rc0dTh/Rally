@@ -20,15 +20,18 @@ async def main():
     traccar = Traccar(os.environ["TRACCAR_URL"], os.environ["TRACCAR_TOKEN"])
     positions = await traccar.positions()
     sent, ignored, stale, invalid = 0, 0, 0, 0
+    seen_devices = set()
     max_age = max(30, int(os.getenv("TRACCAR_MAX_POSITION_AGE_SECONDS", "300")))
     current = datetime.now(timezone.utc)
     rally = RallyClient()
     instance = (os.getenv('TRACCAR_INSTANCE') or sha256(os.environ['TRACCAR_URL'].rstrip('/').encode()).hexdigest()[:16])
     for pos in positions:
-        asset_id = mapping.get(str(pos.get('deviceId')))
+        device_id = str(pos.get('deviceId'))
+        asset_id = mapping.get(device_id)
         if not asset_id:
             ignored += 1
             continue
+        seen_devices.add(device_id)
         try:
             fix = datetime.fromisoformat(str(pos["fixTime"]).replace("Z", "+00:00"))
             if fix.tzinfo is None:
@@ -43,18 +46,21 @@ async def main():
         observation['source_event_id'] = instance + ':' + observation['source_event_id']
         await rally.post('evidence', observation)
         sent += 1
-        if pos.get('valid') is False or current - fix > timedelta(seconds=max_age):
+        if pos.get('valid') is not True or current - fix > timedelta(seconds=max_age):
             stale += 1
-    if sent == 0 or stale or ignored or invalid:
+    missing_devices = set(mapping) - seen_devices
+    if sent == 0 or stale or ignored or invalid or missing_devices:
         await rally.heartbeat('error',
-            f'Coverage unverified/degraded: sent={sent}; stale_or_invalid_fix={stale}; '
-            f'unmapped={ignored}; malformed={invalid}; returned={len(positions)}')
+            f'Coverage unverified/degraded: sent={sent}; stale_or_unknown_fix={stale}; '
+            f'unmapped={ignored}; malformed={invalid}; mapped_devices_absent={len(missing_devices)}; '
+            f'returned={len(positions)}')
     else:
         await rally.heartbeat('ok',
             f'Fresh device positions delivered: {sent}; returned={len(positions)}')
 
     print(json.dumps({"sent": sent, "unmapped_ignored": ignored,
-                      "stale_or_invalid_fix": stale, "malformed": invalid,
+                      "stale_or_unknown_fix": stale, "malformed": invalid,
+                      "mapped_devices_absent": len(missing_devices),
                       "provider_returned": len(positions)}))
 
 if __name__ == "__main__":
