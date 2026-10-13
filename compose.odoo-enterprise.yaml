@@ -1,0 +1,24 @@
+# Local opt-in Odoo Enterprise state reader, using Rally's existing Docker network.
+# Never place provider secrets in this file. No service starts without profile.
+services:
+  odoo-enterprise-sync:
+    profiles: [odoo-enterprise]
+    build: .
+    command: ["python", "-m", "adapters.runner"]
+    restart: unless-stopped
+    env_file: [.env.odoo-enterprise]
+    environment:
+      RALLY_CONNECTOR: odoo_enterprise
+      RALLY_CONNECTOR_SECONDS: ${ODOO_ENTERPRISE_POLL_SECONDS:-300}
+      RALLY_URL: http://rally:8080
+      RALLY_ALLOW_INTERNAL_HTTP: "1"
+    depends_on:
+      rally:
+        condition: service_started
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

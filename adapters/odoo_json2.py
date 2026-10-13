@@ -6,6 +6,7 @@ HTTP success as verification of business completion. No writes or retries.
 from dataclasses import dataclass
 from adapters.transport import validate_url, request
 import httpx
+from rally.erp_contract import MODEL_CONTRACTS
 
 @dataclass(frozen=True)
 class OdooConfig:
@@ -24,7 +25,7 @@ class OdooJSON2:
         self.config = config
 
     async def search_read(self, model: str, domain: list, fields: list[str], limit: int = 100, order: str = "id asc"):
-        if model not in {"sale.order", "project.task", "stock.picking"}:
+        if model not in (set(MODEL_CONTRACTS) | {"project.task"}):
             raise ValueError("Model not approved for read-only Rally connector")
         if not 1 <= limit <= 500:
             raise ValueError("Limit must be between 1 and 500")

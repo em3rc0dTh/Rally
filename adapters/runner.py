@@ -10,10 +10,12 @@ async def main():
     source = os.environ['RALLY_CONNECTOR']
     if source == 'odoo':
         from adapters.odoo_sync_cli import main as cycle
+    elif source == 'odoo_enterprise':
+        from adapters.odoo_enterprise_cli import main as cycle
     elif source == 'traccar':
         from adapters.ingest_cli import main as cycle
     else:
-        raise ValueError('RALLY_CONNECTOR must be odoo or traccar')
+        raise ValueError('RALLY_CONNECTOR must be odoo, odoo_enterprise or traccar')
     logging.basicConfig(level=logging.INFO)
     log = logging.getLogger('rally.connector')
     stop = asyncio.Event()

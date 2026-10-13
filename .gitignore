@@ -19,3 +19,5 @@ build/
 dist/
 
 !.env.traccar.example
+
+!.env.odoo-enterprise.example

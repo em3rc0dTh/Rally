@@ -185,7 +185,7 @@ def initialize(path=None):
         with transaction(db):
             db.execute('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)')
             versions = {r['version'] for r in db.execute('SELECT version FROM schema_migrations').fetchall()}
-            supported = set(range(1, 7))
+            supported = set(range(1, 8))
             if versions - supported:
                 raise RuntimeError('Database schema is newer than this Rally build; use an approved matching release')
             for version, sql in enumerate(MIGRATIONS, 1):
@@ -218,6 +218,36 @@ def initialize(path=None):
             if 6 not in versions:
                 db.execute("ALTER TABLE credentials ADD COLUMN scope TEXT")
                 db.execute('INSERT INTO schema_migrations(version) VALUES(6)')
+
+            # Version 7: independently scoped, state-only Odoo enterprise mirror.
+            # No employee names, payroll amounts or account details are replicated.
+            if 7 not in versions:
+                statements = [
+                    """CREATE TABLE erp_grants (
+                      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                      credential_id TEXT NOT NULL REFERENCES credentials(id),
+                      company_id INTEGER NOT NULL,
+                      model TEXT NOT NULL,
+                      created_at TEXT NOT NULL,
+                      PRIMARY KEY(tenant_id,credential_id,company_id,model))""",
+                    """CREATE TABLE erp_records (
+                      id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                      instance TEXT NOT NULL, company_id INTEGER NOT NULL,
+                      model TEXT NOT NULL, record_id INTEGER NOT NULL,
+                      state TEXT NOT NULL, source_modified_at TEXT NOT NULL,
+                      first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
+                      UNIQUE(tenant_id,instance,company_id,model,record_id))""",
+                    """CREATE TABLE erp_state_changes (
+                      id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                      erp_record_id TEXT NOT NULL REFERENCES erp_records(id),
+                      previous_state TEXT, current_state TEXT NOT NULL,
+                      source_modified_at TEXT NOT NULL, received_at TEXT NOT NULL)""",
+                    "CREATE INDEX idx_erp_records_scope ON erp_records(tenant_id,model,company_id,last_seen)",
+                    "CREATE INDEX idx_erp_changes_record ON erp_state_changes(tenant_id,erp_record_id,received_at)"
+                ]
+                for statement in statements:
+                    db.execute(statement)
+                db.execute('INSERT INTO schema_migrations(version) VALUES(7)')
 
 
 def get_db():
