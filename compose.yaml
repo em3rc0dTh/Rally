@@ -3,6 +3,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    environment:
+      RALLY_DB_PATH: /data/rally.db
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

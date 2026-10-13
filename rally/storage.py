@@ -69,7 +69,7 @@ def database_path() -> str:
 def connect(path=None):
     path = path or database_path()
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(path, isolation_level=None, timeout=20)
+    con = sqlite3.connect(path, isolation_level=None, timeout=20, check_same_thread=False)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys=ON")
     con.execute("PRAGMA busy_timeout=20000")
