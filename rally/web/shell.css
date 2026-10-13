@@ -173,3 +173,12 @@
 .erp-live-scroll table{width:100%;min-width:650px;border-collapse:collapse;font-size:12px}
 .erp-live-scroll th,.erp-live-scroll td{text-align:left;border-bottom:1px solid #243e4c;padding:11px 9px;white-space:nowrap}
 .erp-live-scroll th{color:#9bbac7}
+
+.erp-rule-panel{margin-top:20px}
+.erp-rule-panel>p{color:#a5bfca;font-size:13px;line-height:1.6}
+.erp-rule-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:17px 0}
+.erp-rule-form label{font-size:12px;color:#a6bfca;display:flex;flex-direction:column;gap:5px}
+.erp-rule-form input,.erp-rule-form select{width:100%;min-width:0;min-height:38px;background:#102331;color:#eff8fb;border:1px solid #375462;border-radius:8px;padding:6px 9px}
+.erp-rule-form button{grid-column:1/-1}
+#erp-policy-message{color:#94abbb;font-size:12px;line-height:1.6}
+@media(max-width:860px){.erp-rule-form{grid-template-columns:minmax(0,1fr)}}

@@ -85,3 +85,17 @@ Do not edit `.env` for Rally admin credentials. The new `.env.odoo-enterprise` i
 - A revoked grant blocks subsequent imports immediately. Already imported non-sensitive source states remain historical; determine retention and erase/export requirements with the customer before production.
 - Stop the optional connector without touching Rally or Traccar: `docker compose -f compose.yaml -f compose.odoo-enterprise.yaml --profile odoo-enterprise stop odoo-enterprise-sync`.
 - Never `docker compose down -v`; it deletes named volumes. No real source has been accessed as part of this software development.
+
+
+## Configurable ERP exception cases (optional, default off)
+
+After creating the company/model grant, the tenant administrator may establish an approved state-age policy in **Integrations → ERP exception policy**, or submit:
+
+```json
+{"instance":"APPROVED_INSTANCE","company_id":7,"model":"purchase.order",
+ "state":"draft","max_age_seconds":86400,"severity":"warning"}
+```
+
+Submit to `POST /api/erp/policies`. The rule means: *an observed record of this specific model and company has remained in this state for more than the configured duration*, **not** that a supplier contract or accounting obligation is definitely breached. Rules only evaluate records whose last import is within `RALLY_CONNECTOR_STALE_SECONDS`; stale feeds do not create new asserted cases, and existing cases do not silently close when the source becomes stale. A fresh authorized state transition can resolve its condition using existing Rally case audit and human review. `GET /api/erp/policies` lists configurations; `POST /api/erp/policies/{id}/disable` disables one and allows the worker to close the rule's cases with an audited reason.
+
+The system has no policies by default. No tenant, employee or company is subjected to automatically invented SLA assumptions. Financial/HR policies must receive additional compliance and access review before enabling outside a laboratory.

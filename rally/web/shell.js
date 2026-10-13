@@ -230,6 +230,53 @@
     <button type="button" id="erp-load-state">↻ Load approved ERP states</button>
     <div id="erp-live-result" aria-live="polite"><div class="shell-empty">No ERP query made yet. The source requires a valid Odoo instance, dedicated credential, model/company grant and explicit selector.</div></div>`;
   integrations.append(integrationCards,setupGuides,erpDomains,erpLive,panels.connectorsHead,panels.connectors);
+  const rulePanel=el('section','panel erp-rule-panel');
+  rulePanel.innerHTML=`<h2>ERP exception policy · admin only</h2>
+    <p>Optional age-based state rule. A case is created only when a recently observed ERP record stays in your chosen state beyond the authorized threshold. This does not automatically certify a financial, payroll or field-work breach.</p>
+    <form id="erp-policy-form" class="erp-rule-form">
+      <label>Odoo instance<input name="instance" required maxlength="128" placeholder="Approved source namespace" autocomplete="off"></label>
+      <label>Company ID<input name="company_id" type="number" min="1" step="1" required></label>
+      <label>Source model<select name="model" required>
+        <option value="purchase.order">Purchase order</option>
+        <option value="stock.picking">Stock picking</option>
+        <option value="sale.order">Sale order</option>
+        <option value="crm.lead">CRM opportunity</option>
+        <option value="hr.attendance">Attendance</option>
+        <option value="hr.leave">Leave</option>
+        <option value="hr.employee">Employee</option>
+        <option value="hr.payslip">Payslip</option>
+        <option value="hr.expense">Expense</option>
+        <option value="account.move">Accounting move</option>
+        <option value="account.payment">Payment</option>
+      </select></label>
+      <label>State token<input name="state" required maxlength="80" placeholder="e.g. draft"></label>
+      <label>Max state age (hours)<input name="hours" type="number" min="1" max="8760" step="1" value="24" required></label>
+      <label>Severity<select name="severity"><option value="warning">Warning</option><option value="critical">Critical</option></select></label>
+      <button type="submit">Create or update policy</button>
+    </form><div id="erp-policy-message" role="status" aria-live="polite">No ERP policy configured by this control.</div>`;
+  integrations.append(rulePanel);
+  byId('erp-policy-form').onsubmit=async(event)=>{
+    event.preventDefault();
+    const form=event.currentTarget, msg=byId('erp-policy-message');
+    if(typeof identity==='undefined'||!identity||identity.role!=='admin'){
+      msg.textContent='Tenant administrator access required.';return;
+    }
+    const data=new FormData(form), button=form.querySelector('button[type="submit"]');
+    button.disabled=true;msg.textContent='Saving explicitly approved rule…';
+    try{
+      const body={
+        instance:String(data.get('instance')||'').trim(),
+        company_id:Number(data.get('company_id')),
+        model:String(data.get('model')),
+        state:String(data.get('state')||'').trim(),
+        max_age_seconds:Number(data.get('hours'))*3600,
+        severity:String(data.get('severity'))
+      };
+      const result=await api('erp/policies','POST',body);
+      msg.textContent='Policy saved: '+result.id+'. It will be evaluated by the existing reconciliation worker. Disable it through the admin API if no longer appropriate.';
+    }catch(error){msg.textContent='Policy not saved: '+error.message;}
+    finally{button.disabled=false;}
+  };
   byId('erp-load-state').onclick=async()=>{
     const btn=byId('erp-load-state'), host=byId('erp-live-result');
     if(typeof identity==='undefined'||!identity||identity.role!=='admin'){

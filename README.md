@@ -23,7 +23,7 @@ See [Odoo enterprise domain expansion](docs/18-odoo-enterprise-domain-expansion.
 
 Rally now includes a **real, source-agnostic Odoo JSON-2 read-only state bridge** for 11 selected Odoo model types across CRM, sales, procurement, inventory, workforce, payroll, expenses, accounting and payments. A tenant admin must authorize an active Odoo connector credential per company+model; a customer-reviewed Odoo query selector is mandatory per model. Records store only source record IDs, company, state and source timestamps, with a durable history of state transitions—**not names, payroll amounts, invoice totals, bank/payment credentials or personal data fields**. The interface shows authorized state counts through `Integrations → Enterprise ERP state mirror` after explicit admin click.
 
-See [Odoo enterprise bridge activation](docs/19-odoo-enterprise-bridge.md). Connectors **are not running and have no Odoo API key until you configure one**. Specific business-rule exceptions/financial reconciliation are NOT implemented by the state mirror; no payment execution, accounting entries or payroll writes are added.
+See [Odoo enterprise bridge activation](docs/19-odoo-enterprise-bridge.md). Connectors **are not running and have no Odoo API key until you configure one**. Optional tenant-admin-defined source-state aging policies can now create auditable Rally cases after confirmed fresh Odoo observations; true business-specific exception rules/financial reconciliation are NOT implemented by the state mirror; no payment execution, accounting entries or payroll writes are added.
 
 ## Release 0.2
 

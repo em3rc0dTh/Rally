@@ -34,6 +34,7 @@ assert.ok(document.querySelector('[data-screen="evidence"] #new-evidence'));
 assert.ok(document.querySelector('[data-screen="integrations"] #connectors'));
 assert.equal(document.querySelectorAll('[data-screen="integrations"] .erp-domain').length, 8);
 assert.ok(document.querySelector('[data-screen="integrations"] #erp-load-state'));
+assert.ok(document.querySelector('[data-screen="integrations"] #erp-policy-form'));
 assert.match(document.querySelector('#erp-live-result').textContent,/No ERP query made yet/);
 assert.match(document.querySelector('[data-screen="integrations"] .erp-domain-catalog').textContent,/Payments/);
 assert.match(document.querySelector('[data-screen="integrations"] .erp-domain-catalog').textContent,/not wired/);
