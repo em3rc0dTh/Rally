@@ -46,7 +46,7 @@ def test_connector_cannot_read_others_or_overwrite_manual_jobs(authorized):
     updated=api.post("/api/jobs/import",headers=odoo,json={"external_ref":"odoo:erp_a:sale.order:1","title":"Renamed"})
     assert updated.status_code==200 and updated.json()["id"]==created.json()["id"]
     assert updated.json()["title"]=="Renamed"
-    assert api.get("/api/jobs",headers=admin).json()[0]["title"]=="Renamed"
+    assert next(j for j in api.get("/api/jobs",headers=admin).json() if j["external_ref"]=="odoo:erp_a:sale.order:1")["title"]=="Renamed"
 
 def test_cases_owner_notes_and_authoritative_resolution(authorized):
     api=authorized["api"];admin=authorized["headers"]
