@@ -2,20 +2,43 @@ name: Rally validation
 on:
   push:
   pull_request:
+permissions:
+  contents: read
 jobs:
   tests:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_USER: rally
+          POSTGRES_PASSWORD: rally-ci-only
+          POSTGRES_DB: rally_ci_admin
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rally -d rally_ci_admin"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      RALLY_PG_ADMIN_URL: postgresql://rally:rally-ci-only@localhost:5432/rally_ci_admin
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install app and test dependencies
+      - name: Install application and validation dependencies
         run: python -m pip install -e '.[test]'
       - name: Compile Python
         run: python -m compileall -q rally adapters workflows tests
-      - name: Run tests
+      - name: Run SQLite and disposable PostgreSQL integration tests
         run: python -m pytest -q
-
-      - name: Build local container image
-        run: docker build -t rally-mk0:ci .
+      - name: Validate production Compose
+        env:
+          RALLY_ADMIN_KEY: "integration-only-abcdefghijklmnopqrstuv1234567890"
+          POSTGRES_PASSWORD: rally-ci-only
+          RALLY_DOMAIN: rally.example.com
+          ACME_EMAIL: ci@example.com
+        run: docker compose -f compose.production.yaml config --quiet
+      - name: Build application container
+        run: docker build -t rally-ci:latest .
