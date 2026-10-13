@@ -131,7 +131,11 @@
   const work=makePage('work','Work orders','Create operational intent, complete jobs and inspect business commitments.');
   dual(work,panels.jobForm,panels.jobs);
   const assets=makePage('assets','Equipment & custody','Register serialized equipment, issue it to a holder and account for each return.');
-  dual(assets,panels.assetForm,panels.issueForm);assets.append(panels.custody);
+  dual(assets,panels.assetForm,panels.issueForm);
+  const assetRegister=el('section','panel',`<h2>Asset register</h2><p class="muted">Operational inventory linked to handover history.</p>
+    <div class="scroll"><table><thead><tr><th>Tag</th><th>Equipment</th><th>Availability</th><th>Current holder</th></tr></thead>
+    <tbody id="asset-register"><tr><td colspan="4">Connect to view equipment.</td></tr></tbody></table></div>`);
+  assets.append(assetRegister,panels.custody);
   const exceptions=makePage('exceptions','Exception recovery','Acknowledge responsibility without prematurely closing the underlying discrepancy.');
   exceptions.append(panels.casesHead,panels.cases);
   const evidence=makePage('evidence','Evidence ledger','Review what was observed, when, and by which source—without claiming automatic proof.');
@@ -228,6 +232,15 @@
     const who=detail.identity;
     byId('tenant-chip').textContent=who ? who.name+' · '+who.role : 'Not connected';
     byId('sidebar-status').innerHTML='<span class="signal-dot '+(who?'good':'off')+'"></span> '+(who?'Tenant connected':'Not connected');
+    const assetList=detail.assets||[], activeCustody=(detail.custody||[]).filter(x=>x.state==='active');
+    const assignedByAsset=new Map(activeCustody.map(x=>[x.asset_id,x]));
+    byId('asset-register').innerHTML=assetList.map(x=>{
+      const assigned=assignedByAsset.get(x.id);
+      return '<tr><td><strong>'+safe(x.tag)+'</strong></td><td>'+safe(x.name)+
+        '</td><td><span class="badge '+(assigned?'warn':'')+'">'+
+        safe(assigned?'Assigned':x.status||'Ready')+'</span></td><td>'+
+        safe(assigned?.holder||'—')+'</td></tr>';
+    }).join('')||'<tr><td colspan="4">No equipment registered for this tenant.</td></tr>';
     const coverage=detail.coverage||[];
     const active=coverage.filter(x=>x.coverage==='current').length;
     byId('source-chip').textContent='Sources · '+active+'/'+coverage.length+' current';

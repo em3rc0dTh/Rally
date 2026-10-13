@@ -59,7 +59,8 @@ function draw(){
  $('cases').innerHTML=state.cases.map(x=>`<tr><td><span class="badge ${x.severity==='critical'?'bad':'warn'}">${esc(x.severity)}</span></td><td>${esc(x.description)}<br><small>${esc(x.fingerprint)}</small></td><td>${esc(x.state)}</td><td>${esc(x.last_seen)} <button class="small" data-case="${esc(x.id)}">Open</button></td></tr>`).join('')||'<tr><td colspan="4">No loaded exceptions.</td></tr>';
  $('custody').innerHTML=state.custody.map(x=>`<tr><td>${esc(assets.get(x.asset_id)||x.asset_id)}</td><td>${esc(x.holder)}</td><td>${esc(x.state)}</td><td>${x.state==='active'&&canOperate()?`<button class="small" data-return="${esc(x.id)}">Return</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="4">No loaded custody.</td></tr>';
  $('jobs').innerHTML=state.jobs.map(x=>`<tr><td>${esc(x.external_ref)}</td><td>${esc(x.title)}</td><td>${esc(x.state)}</td><td>${x.state!=='completed'&&canOperate()?`<button class="small" data-complete="${esc(x.id)}">Complete</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="4">No loaded work orders.</td></tr>';
- $('evidence').innerHTML=state.evidence.map(x=>`<tr><td>${esc(x.received_at)}</td><td>${esc(x.source)}</td><td>${esc(x.event_type)}</td><td>${esc(x.source_event_id)}</td></tr>`).join('')||'<tr><td colspan="4">No loaded evidence.</td></tr>';
+ const jobRefs=new Map(state.jobs.map(x=>[x.id,x.external_ref]));
+ $('evidence').innerHTML=state.evidence.map(x=>`<tr><td>${esc(x.received_at)}</td><td>${esc(assets.get(x.asset_id)||'—')}</td><td>${esc(jobRefs.get(x.job_id)||'—')}</td><td>${esc(x.source)}</td><td>${esc(x.event_type)}</td><td>${esc(x.source_event_id)}</td></tr>`).join('')||'<tr><td colspan="6">No loaded evidence.</td></tr>';
  $('audit').innerHTML=state.audit.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.actor_id||'Legacy unattributed')}</td><td>${esc(x.entity)} · ${esc(x.entity_id)}</td><td>${esc(x.action)}</td></tr>`).join('')||'<tr><td colspan="4">No loaded audit events.</td></tr>';
  $('paging').replaceChildren();
  Object.keys(state).forEach(k=>{const b=document.createElement('button');b.textContent=`More ${k} (${state[k].length} loaded)`;b.disabled=!pages[k]||!identity;b.onclick=()=>busy(b,async()=>{const rows=await api(k+'?limit=200&offset='+offsets[k]);offsets[k]+=rows.length;const known=new Set(state[k].map(x=>x.id));state[k].push(...rows.filter(x=>!known.has(x.id)));pages[k]=rows.length===200;draw();});$('paging').append(b);});
@@ -102,9 +103,23 @@ document.addEventListener('click',event=>{
    selectedCase=b.dataset.case;
    const c=await api('cases/'+selectedCase);
    const displayActor=x=>credentialNames.get(x)||x||'Unassigned';
-   $('case-detail').textContent=[c.description,'State: '+c.state,'Condition: '+c.fingerprint,
+   const assignmentId=(c.fingerprint||'').split(':')[1];
+   const assigned=state.custody.find(x=>x.id===assignmentId);
+   const asset=state.assets.find(x=>x.id===assigned?.asset_id);
+   const order=state.jobs.find(x=>x.id===assigned?.job_id);
+   $('case-detail').textContent=[
+      c.description,
+      'State: '+c.state+' · '+c.severity,
+      'Equipment: '+(asset?asset.tag+' · '+asset.name:'Unlinked / not loaded'),
+      'Work order: '+(order?order.external_ref+' · '+order.title:'Unlinked / not loaded'),
+      'Holder: '+(assigned?.holder||'Unknown'),
+      'Custody: '+(assigned?.state||'Unknown'),
       'Owner: '+displayActor(c.owner_id),
-      ...c.notes.map(n=>n.created_at+' · '+displayActor(n.actor_id)+'\n'+n.note)].join('\n\n');
+      'First observed: '+c.first_seen,
+      'Last observed: '+c.last_seen,
+      ...(c.resolved_at?['Resolved: '+c.resolved_at]:[]),
+      ...c.notes.map(n=>n.created_at+' · '+displayActor(n.actor_id)+'\n'+n.note)
+   ].join('\n\n');
    $('case-action').hidden=c.state==='resolved'||!canReview();
    $('case-dialog').showModal();
  });
