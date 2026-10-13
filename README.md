@@ -22,7 +22,7 @@ Rally links work-order intent to equipment custody, immutable-by-API observation
 
 ## Production configuration gate
 
-Before a real installation, load the approved production environment and run `python -m ops.preflight` (requires Python 3.11+). This rejects placeholders and unsafe deployment secrets but **does not replace live readiness, backups, privacy, or provider certification**. See `docs/10-production-operations.md`.
+Before a real installation, load the approved production environment and run `python -m ops.preflight` (requires Python 3.11+). This rejects placeholders and unsafe deployment secrets but **does not replace live readiness, backups, privacy, or provider certification**. See `docs/10-production-operations.md` and [the production go/no-go gate](docs/13-production-readiness.md).
 
 ## Development
 
