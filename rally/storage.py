@@ -171,6 +171,15 @@ def transaction(db):
 
 def initialize(path=None):
     with connect(path) as db:
+        if db.postgres and os.getenv('RALLY_ENV') == 'production':
+            privileges = db.execute(
+                "SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication "
+                "FROM pg_roles WHERE rolname=current_user"
+            ).fetchone()
+            if not privileges or any(privileges.values()):
+                raise RuntimeError(
+                    'Production Rally database account must not have server-wide administrator privileges'
+                )
         if not db.postgres:
             db.execute('PRAGMA journal_mode=WAL')
         with transaction(db):

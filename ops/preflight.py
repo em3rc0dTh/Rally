@@ -13,6 +13,7 @@ def validate(values: dict[str, str]) -> list[str]:
     problems: list[str] = []
     admin = values.get("RALLY_ADMIN_KEY", "").strip()
     password = values.get("POSTGRES_PASSWORD", "").strip()
+    runtime_password = values.get("RALLY_APP_PASSWORD", "").strip()
     domain = values.get("RALLY_DOMAIN", "").strip().lower()
     email = values.get("ACME_EMAIL", "").strip().lower()
 
@@ -22,6 +23,10 @@ def validate(values: dict[str, str]) -> list[str]:
         problems.append("RALLY_ADMIN_KEY must be a random-looking secret of at least 32 characters")
     if not re.fullmatch(r"[0-9a-fA-F]{32,}", password) or len(set(password)) < 10:
         problems.append("POSTGRES_PASSWORD must be at least 32 hexadecimal characters with high variability")
+    if not re.fullmatch(r"[0-9a-fA-F]{32,}", runtime_password) or len(set(runtime_password)) < 10:
+        problems.append("RALLY_APP_PASSWORD must be a separately generated hexadecimal secret of at least 32 characters")
+    if password and password == runtime_password:
+        problems.append("RALLY_APP_PASSWORD must differ from POSTGRES_PASSWORD")
     if (not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{1,251}[a-z0-9])", domain)
         or "." not in domain
         or ".." in domain
@@ -43,8 +48,10 @@ def validate(values: dict[str, str]) -> list[str]:
         url = urlsplit(values["RALLY_DATABASE_URL"])
         if url.scheme not in {"postgres", "postgresql"} or not url.hostname:
             problems.append("RALLY_DATABASE_URL must target PostgreSQL")
-        if unquote(url.password or "") != password:
-            problems.append("RALLY_DATABASE_URL password differs from POSTGRES_PASSWORD")
+        if url.username != "rally_app":
+            problems.append("RALLY_DATABASE_URL must use the non-superuser rally_app role")
+        if unquote(url.password or "") != runtime_password:
+            problems.append("RALLY_DATABASE_URL password differs from RALLY_APP_PASSWORD")
 
     return problems
 

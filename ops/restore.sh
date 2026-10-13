@@ -7,6 +7,6 @@ if [[ $# != 2 || ! "$2" =~ ^rally_restore_[a-z0-9_]+$ ]]; then
 fi
 sha256sum -c "$1.sha256"
 restore_db="$2"
-docker compose --env-file .env.production -f compose.production.yaml exec -T postgres createdb -U rally "$restore_db"
-docker compose --env-file .env.production -f compose.production.yaml exec -T postgres pg_restore -U rally -d "$restore_db" --no-owner --exit-on-error --single-transaction < "$1"
+docker compose --env-file .env.production -f compose.production.yaml exec -T postgres createdb -U rally --owner=rally_app "$restore_db"
+docker compose --env-file .env.production -f compose.production.yaml exec -T postgres pg_restore -U rally --role=rally_app -d "$restore_db" --no-owner --exit-on-error --single-transaction < "$1"
 printf 'Restored into %s. Production database was not modified.\n' "$restore_db"

@@ -2,7 +2,7 @@
 x-env: &env
   RALLY_ENV: production
   RALLY_ADMIN_KEY: ${RALLY_ADMIN_KEY:?Generate a strong admin key}
-  RALLY_DATABASE_URL: postgresql://rally:${POSTGRES_PASSWORD:?Generate a hexadecimal password}@postgres:5432/rally
+  RALLY_DATABASE_URL: postgresql://rally_app:${RALLY_APP_PASSWORD:?Generate an independent hexadecimal application password}@postgres:5432/rally
   RALLY_ALLOWED_HOSTS: ${RALLY_DOMAIN:?Set the public domain},127.0.0.1,localhost,rally
   RALLY_RECONCILE_SECONDS: "60"
   RALLY_WORKER_STALE_SECONDS: "180"
@@ -30,7 +30,10 @@ services:
       POSTGRES_DB: rally
       POSTGRES_USER: rally
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Required}
-    volumes: ["postgres_data:/var/lib/postgresql/data"]
+      RALLY_APP_PASSWORD: ${RALLY_APP_PASSWORD:?Generate a separate application password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./ops/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rally -d rally"]
       interval: 10s

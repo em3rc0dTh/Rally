@@ -10,7 +10,7 @@ Use a dedicated domain and host with Docker Engine/Compose, persistent disk and 
 
 1. Clone this repository and select the reviewed release commit.
 2. Copy `.env.production.example` to `.env.production`, permission 0600.
-3. Generate independent 32-byte hexadecimal secrets for `POSTGRES_PASSWORD` and `RALLY_ADMIN_KEY`. Hex avoids special characters in the constructed database URL. Fill `RALLY_DOMAIN` and `ACME_EMAIL`; point DNS to the host.
+3. Generate three independent 32-byte hexadecimal secrets for `POSTGRES_PASSWORD` (database bootstrap), `RALLY_APP_PASSWORD` (non-superuser runtime), and `RALLY_ADMIN_KEY` (platform). Hex avoids special characters in the constructed database URL. Fill `RALLY_DOMAIN` and `ACME_EMAIL`; point DNS to the host.
 4. Run `docker compose --env-file .env.production -f compose.production.yaml up --build -d`.
 5. Caddy obtains TLS for the configured domain. API and worker apply versioned migrations under a database lock. PostgreSQL data and Caddy state use named volumes.
 6. Provision a tenant at `https://DOMAIN/api/tenants` with the platform key; retain its one-time token. Create individual administrators/operators/reviewers and source-specific connectors in Mission Control. Rotate away the bootstrap token.
@@ -114,3 +114,12 @@ No se debe iniciar una instalación de clientes sin revisar configuración y pro
 ### Forward-only schema compatibility
 
 Application startup now fails closed if `schema_migrations` declares a version higher than the supported 6. Never roll back only the image onto a newer database schema: use the approved image for that schema, or restore a verified earlier database copy in a separate database and switch both API and worker. The production environment also refuses obviously low-variability platform administrator secrets. The backup script removes incomplete `.partial` files on failure and refuses an empty dump; this does **not** substitute for scheduled off-host encrypted backup and restore drills.
+
+
+## PostgreSQL least-privilege deployment (release candidate)
+
+New database volumes run `ops/initdb/01-runtime-role.sh` once, during PostgreSQL initialization. The bootstrap role creates `rally_app` without SUPERUSER, CREATEDB, CREATEROLE or REPLICATION rights; Rally's database is then owned by `rally_app`. Only the database service holds the PostgreSQL bootstrap secret; API and worker authenticate as `rally_app`. Application startup refuses server-wide database administrator privileges.
+
+**Breaking upgrade requirement:** Docker does not rerun initialization scripts on existing PostgreSQL volumes. Never delete an existing volume or automatically reassign table ownership. If an installation exists on the prior bootstrap-only database layout, back up and validate restoration, then migrate schema/table ownership to `rally_app` under an independently reviewed change plan before switching both API and worker. New empty installations provision automatically.
+
+Restore scripts make separately restored databases and their objects owned by `rally_app`. The new initialization script and live PostgreSQL user ownership have NOT been executed or certified in this no-tests development phase.
