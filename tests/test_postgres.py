@@ -113,7 +113,7 @@ def test_postgres_custody_idempotency_and_reconciliation(postgres_client):
     assert api.post("/api/reconcile", headers=auth).json()["open_conditions"] == 1
     returned = api.post("/api/custody/return",
                         headers={**auth,"Idempotency-Key":"pg-return-001"},
-                        json={"custody_id":first.json()["id"],"confirmed_by":"Field technician"})
+                        json={"custody_id":first.json()["id"],"confirmed_by":"Bootstrap administrator"})
     assert returned.status_code == 200
     assert api.post("/api/reconcile", headers=auth).json()["open_conditions"] == 0
     assert api.get("/api/cases", headers=auth).json()[0]["state"] == "resolved"

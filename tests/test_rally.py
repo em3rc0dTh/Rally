@@ -23,7 +23,7 @@ def test_custody_unique_and_idempotency(authorized):
     assert api.post("/api/custody/issue",headers={**h,"Idempotency-Key":"key-first-001"},json={**req,"holder":"Someone else"}).status_code == 409
     returned=api.post("/api/custody/return",headers={**h,"Idempotency-Key":"key-return-003"},json={"custody_id":first.json()["id"],"confirmed_by":"Bootstrap administrator"})
     assert returned.status_code == 200
-    assert api.post("/api/custody/return",headers={**h,"Idempotency-Key":"key-return-003"},json={"custody_id":first.json()["id"],"confirmed_by":"Operator"}).status_code == 200
+    assert api.post("/api/custody/return",headers={**h,"Idempotency-Key":"key-return-003"},json={"custody_id":first.json()["id"],"confirmed_by":"Bootstrap administrator"}).status_code == 200
     assert api.post("/api/custody/issue",headers={**h,"Idempotency-Key":"key-third-004"},json=req).status_code == 200
 
 def test_reconciliation_opens_and_resolves(authorized):

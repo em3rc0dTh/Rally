@@ -10,6 +10,13 @@ def client(monkeypatch):
         monkeypatch.setenv("RALLY_ADMIN_KEY", "a" * 40)
         from rally.app import app
         with TestClient(app) as api:
+            # The app is a process-global ASGI object; each disposable test
+            # represents an independent installation with a fresh IP limiter.
+            middleware = app.middleware_stack
+            while middleware is not None:
+                if hasattr(middleware, "windows"):
+                    middleware.windows.clear()
+                middleware = getattr(middleware, "app", None)
             yield api
 
 @pytest.fixture
