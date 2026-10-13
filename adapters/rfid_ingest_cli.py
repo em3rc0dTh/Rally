@@ -26,6 +26,14 @@ async def main():
     max_events = int(os.getenv('RFID_MAX_SPOOL_EVENTS', '100000'))
     if max_events < 1:
         raise ValueError('RFID_MAX_SPOOL_EVENTS must be positive')
+    max_bytes = int(os.getenv('RFID_MAX_SPOOL_BYTES', '268435456'))
+    if max_bytes < 16777216 or max_bytes > 10737418240:
+        raise ValueError('RFID spool disk budget out of allowed range')
+    page_size = db.execute('PRAGMA page_size').fetchone()[0]
+    max_pages = max_bytes // page_size
+    if db.execute('PRAGMA page_count').fetchone()[0] > max_pages:
+        raise RuntimeError('Existing spool is larger than allowed capacity')
+    db.execute('PRAGMA max_page_count=' + str(max_pages))
     import httpx
     from adapters.transport import request
     async with httpx.AsyncClient(timeout=30) as http:
@@ -51,10 +59,15 @@ async def main():
             while db.execute('SELECT 1 FROM spool LIMIT 1').fetchone():
                 await drain()
             return
-        for line in sys.stdin:
-            if not line.strip():
+        while True:
+            raw = sys.stdin.buffer.readline(65537)
+            if not raw:
+                break
+            if len(raw) > 65536:
+                raise ValueError('RFID input event exceeds 64 KiB')
+            if not raw.strip():
                 continue
-            event = rfid_evidence(json.loads(line), mapping)
+            event = rfid_evidence(json.loads(raw.decode('utf-8')), mapping)
             payload = json.dumps(event, sort_keys=True)
             event_id = event['source_event_id']
             old = db.execute('SELECT payload FROM spool WHERE id=?', (event_id,)).fetchone()
