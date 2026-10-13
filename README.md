@@ -13,6 +13,12 @@ See [Mission Control 0.3](docs/16-mission-control-ui.md) for UX architecture, of
 
 Run an official, pinned Traccar server next to Rally using `compose.traccar.yaml`; its standalone persistent volume and loopback-only web UI do not change Rally's data. Optional tenant-scoped polling bridges real phone coordinates into Fleet & GPS. See [self-hosted Traccar setup](docs/17-traccar-self-hosted.md) for Windows/WSL ports, device IDs, API tokens and safety limitations. **This is a local lab, not a production tracking deployment.**
 
+## Cross-domain Odoo enterprise extension — append only
+
+Rally's Odoo scope is wider than selected work orders: CRM, purchases, inventory, workforce/attendance, leave, payroll, expenses, invoices and payments are **business domains that could be assured**, depending on the customer's modules and permissions. The user's separate private `em3rc0dTh/Odoo` repository was reviewed as a reference. Mission Control → Integrations now shows an explicit **reference-only, not connected** domain catalog. **No finance, HR, CRM or inventory connector has been implemented by this appendix**, and none of the existing custody/GPS workflows are changed.
+
+See [Odoo enterprise domain expansion](docs/18-odoo-enterprise-domain-expansion.md) for the source-by-source audit, planned contracts, safety boundaries and delivery plan.
+
 ## Release 0.2
 
 - PostgreSQL production persistence with versioned migrations, tenant foreign keys and transactionally serialized writes. SQLite remains available for local development.

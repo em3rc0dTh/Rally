@@ -68,3 +68,8 @@ A confirmed Odoo sale may contain stock-only goods and is **not necessarily a fi
 ## Self-hosted local Traccar server
 
 For Docker on WSL, use [the Traccar self-hosted lab](17-traccar-self-hosted.md). It provides a pinned 6.16.0-alpine Traccar instance, named data/log volumes, local TCP 8082 UI, optional LAN TCP 5055 device receiver, and an opt-in scoped `traccar-sync` poller on the Rally network. This is not a managed SaaS deployment.
+
+
+## Beyond selected sales orders: cross-domain Odoo reference
+
+Odoo supports multiple business domains, but Rally 0.3's implemented adapter is deliberately limited to explicitly selected confirmed sales imported as work-order candidates. The separate private repo `em3rc0dTh/Odoo` provides research examples for CRM, procurement, inventory, attendance, payroll, leave and expenses—not a validated adapter or authentication configuration for this runtime. Accounting and payment-state reconciliation are proposed, not implemented. See [the appended Odoo domain matrix](18-odoo-enterprise-domain-expansion.md). Never grant broad Odoo administrative access merely to populate the catalog; finance/HR require distinct least-privilege roles and data minimization.

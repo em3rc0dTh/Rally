@@ -174,9 +174,9 @@
     'Connect established tools rather than rebuilding ERP or GPS infrastructure.');
   const integrationCards=el('div','integration-grid');
   integrationCards.innerHTML=`
-    <div class="integration-card"><span class="shell-label">ERP · Business intent</span><h3>Odoo 19</h3>
+    <div class="integration-card"><span class="shell-label">ERP · Business context</span><h3>Odoo 19</h3>
       <span id="source-odoo" class="badge">Not connected</span>
-      <p>Read confirmed, explicitly selected service orders from the customer's Odoo database. Restricted API credentials and instance scope required.</p>
+      <p>Odoo covers CRM, sales, procurement, stock, workforce, accounting and payments when licensed/installed. <strong>Current Rally connector only imports explicitly selected confirmed sales as work-order candidates.</strong> No HR, invoice or payment-state sync is connected.</p>
       <a href="https://www.odoo.com/documentation/19.0/developer/reference/external_api.html" target="_blank" rel="noopener noreferrer">Official Odoo JSON-2 API ↗</a></div>
     <div class="integration-card"><span class="shell-label">GPS · Reported position</span><h3>Traccar</h3>
       <span id="source-traccar" class="badge">Not connected</span>
@@ -210,7 +210,21 @@
         <p>Readings are observations, not automatic custody transfers. Verify the physical reader.</p>
       </details>
     </div>`;
-  integrations.append(integrationCards,setupGuides,panels.connectorsHead,panels.connectors);
+  const erpDomains=el('section','panel erp-domain-catalog');
+  erpDomains.innerHTML=`<h2>Odoo business domains — expansion reference</h2>
+    <p>ERP applications are broader than work orders. These are <strong>integration candidates</strong> derived from the Odoo reference repository and native Odoo capabilities. They are not connected, imported, or monitored by Rally today. The current Odoo connector covers only explicitly selected confirmed sales.</p>
+    <div class="erp-domain-grid" aria-label="Planned Odoo domain coverage">
+      <article class="erp-domain"><span class="shell-label">CRM &amp; customers</span><h3>Leads, contacts and customer handoffs</h3><p>Track the transition from commercial commitment to accountable execution.</p><span class="erp-domain-status">Reference only · not wired</span></article>
+      <article class="erp-domain"><span class="shell-label">Sales &amp; field work</span><h3>Sales, work orders and services</h3><p>Current scope: selected sales imported as jobs; service correlation remains planned.</p><span class="erp-domain-status">Partial · selected-sale importer only</span></article>
+      <article class="erp-domain"><span class="shell-label">Procurement</span><h3>Orders, suppliers and receipts</h3><p>Planned detection of expected versus verified procurement outcomes.</p><span class="erp-domain-status">Reference only · not wired</span></article>
+      <article class="erp-domain"><span class="shell-label">Inventory</span><h3>Stock, locations and serialized assets</h3><p>Compare ERP inventory obligations with physical observations and custody.</p><span class="erp-domain-status">Reference only · not wired</span></article>
+      <article class="erp-domain"><span class="shell-label">Workforce</span><h3>Employees, attendance and leave</h3><p>Candidate exception workflow for unjustified absence, late attendance and approvals.</p><span class="erp-domain-status">Reference only · sensitive HR</span></article>
+      <article class="erp-domain"><span class="shell-label">Payroll &amp; expenses</span><h3>Payslips, reimbursements and approvals</h3><p>Future approval and exception states, not payroll calculations or payment execution.</p><span class="erp-domain-status">Reference only · sensitive HR</span></article>
+      <article class="erp-domain"><span class="shell-label">Accounting</span><h3>Invoices and financial documents</h3><p>Proposed verification of pending documents, missing invoices and accountable recovery.</p><span class="erp-domain-status">Proposed · not in reference adapter</span></article>
+      <article class="erp-domain"><span class="shell-label">Payments</span><h3>Collections and reconciliation</h3><p>Proposed cross-system status verification; payment execution remains out of scope.</p><span class="erp-domain-status">Proposed · not in reference adapter</span></article>
+    </div>
+    <p class="erp-domain-footnote">Source model, company restrictions, field availability, data retention and API edition must be validated for each customer's actual Odoo deployment. No HR or financial figures are displayed without authoritative integration.</p>`;
+  integrations.append(integrationCards,setupGuides,erpDomains,panels.connectorsHead,panels.connectors);
   const governance=makePage('governance','Audit & access','Review the chain of accountability and manage individual access permissions.');
   governance.append(panels.auditHead,panels.audit,panels.access);
   // The native <dialog> must not be inside a hidden screen.

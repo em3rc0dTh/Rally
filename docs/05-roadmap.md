@@ -25,3 +25,10 @@ These cannot be completed from source code without a target environment and cred
 - Fabrication quoting and other vertical hypotheses remain separate product work.
 
 The immediate product remains custody assurance linked to work orders. It does not implement the entire original platform vision or certify that customers will pay for it.
+
+
+## Additive cross-domain ERP assurance expansion (2026-10-13)
+
+Source-backed Odoo extension, preserving 0.2/0.3 core: [Enterprise Odoo reference and plan](18-odoo-enterprise-domain-expansion.md). CRM, procurement, inventory, employees, attendance, leave, payroll, expenses and financial/payment-status reconciliation are distinct workstreams; only the existing explicitly selected `sale.order` import is implemented. The catalog in Integrations is planning context, not evidence of a connected ERP.
+
+Release gates: first verify a real customer's Odoo modules/API entitlements/company scopes; next deliver a versioned, permission-separated generic obligation/evidence contract; then implement **read-only** adapters per domain; finally certify reconciliations and UI with authentic source data. HR/finance data minimization and legal review are mandatory; payment execution and accounting writes stay excluded.
