@@ -186,7 +186,31 @@
       <span id="source-rfid" class="badge">Not connected</span>
       <p>Edge readings and manual observations are evidence inputs, never an automatic custody handover or return.</p>
       <button type="button" data-go="evidence">Inspect evidence ↗</button></div>`;
-  integrations.append(integrationCards,panels.connectorsHead,panels.connectors);
+
+  const setupGuides=el('section','panel');
+  setupGuides.innerHTML=`<h2>Connector activation — deployment controlled</h2>
+    <p>Rally does not ask for Odoo or Traccar secrets in the browser. Use restricted provider credentials on the deployment host and associate them with a dedicated connector identity.</p>
+    <div class="screen-dual">
+      <details class="shell-setup"><summary>Odoo → work-order import <span class="muted">3 steps</span></summary>
+        <ol><li>Issue a credential with role <code>connector</code>, source <code>odoo</code>, and an exact instance namespace.</li>
+        <li>Configure <code>ODOO_URL</code>, <code>ODOO_DATABASE</code>, <code>ODOO_API_KEY</code>,
+        <code>ODOO_INSTANCE</code>, <code>ODOO_COMPANY_IDS</code> and a customer-approved <code>ODOO_WORKORDER_DOMAIN_JSON</code>.</li>
+        <li>Set <code>RALLY_URL</code> and the connector <code>RALLY_TENANT_TOKEN</code>; run <code>python -m adapters.odoo_sync_cli</code> in the deployment environment.</li></ol>
+        <p>Only explicitly selected confirmed sales are candidates. No automatic writes back to Odoo.</p>
+      </details>
+      <details class="shell-setup"><summary>Traccar → Fleet & GPS <span class="muted">3 steps</span></summary>
+        <ol><li>Issue a source-scoped <code>traccar</code> connector credential in Audit & access.</li>
+        <li>Configure <code>TRACCAR_URL</code>, <code>TRACCAR_TOKEN</code> and <code>TRACCAR_DEVICE_ASSET_MAP</code> on the host.</li>
+        <li>Set <code>RALLY_URL</code> and <code>RALLY_TENANT_TOKEN</code>; run <code>python -m adapters.ingest_cli</code>, then open Fleet & GPS.</li></ol>
+        <p>Poller sends latest reported positions. Real-time Traccar WebSocket is not implemented here.</p>
+      </details>
+      <details class="shell-setup"><summary>RFID edge → evidence <span class="muted">2 steps</span></summary>
+        <ol><li>Provision a device-scoped reader identity and explicitly map EPC values through <code>RFID_EPC_ASSET_MAP</code>.</li>
+        <li>Supply authenticated normalized events to <code>python -m adapters.rfid_ingest_cli</code>.</li></ol>
+        <p>Readings are observations, not automatic custody transfers. Verify the physical reader.</p>
+      </details>
+    </div>`;
+  integrations.append(integrationCards,setupGuides,panels.connectorsHead,panels.connectors);
   const governance=makePage('governance','Audit & access','Review the chain of accountability and manage individual access permissions.');
   governance.append(panels.auditHead,panels.audit,panels.access);
   // The native <dialog> must not be inside a hidden screen.

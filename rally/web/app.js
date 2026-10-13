@@ -4,6 +4,10 @@ const state = {assets:[], jobs:[], custody:[], cases:[], evidence:[], audit:[]};
 let bearer = '', identity = null, generation = 0, selectedCase = null;
 const pages = {}, offsets = {}, pending = new Map();
 const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const displayTime = iso => {
+ const date=new Date(iso);
+ return Number.isNaN(date.getTime()) ? String(iso||'—') : date.toLocaleString();
+};
 const canOperate = () => ['admin','operator'].includes(identity?.role);
 const canReview = () => ['admin','operator','reviewer'].includes(identity?.role);
 function notice(message,bad=false){$('notice').textContent=message;$('notice').className='notice'+(bad?' error':'');}
@@ -56,12 +60,12 @@ function draw(){
  fill('issue-job',state.jobs.filter(x=>x.state!=='completed'),x=>x.external_ref+' · '+x.title,true);
  fill('event-job',state.jobs,x=>x.external_ref+' · '+x.title,true);
  const assets=new Map(state.assets.map(x=>[x.id,x.tag]));
- $('cases').innerHTML=state.cases.map(x=>`<tr><td><span class="badge ${x.severity==='critical'?'bad':'warn'}">${esc(x.severity)}</span></td><td>${esc(x.description)}<br><small>${esc(x.fingerprint)}</small></td><td>${esc(x.state)}</td><td>${esc(x.last_seen)} <button class="small" data-case="${esc(x.id)}">Open</button></td></tr>`).join('')||'<tr><td colspan="4">No loaded exceptions.</td></tr>';
+ $('cases').innerHTML=state.cases.map(x=>`<tr><td><span class="badge ${x.severity==='critical'?'bad':'warn'}">${esc(x.severity)}</span></td><td>${esc(x.description)}<br><small>${esc(x.fingerprint)}</small></td><td>${esc(x.state)}</td><td>${esc(displayTime(x.last_seen))} <button class="small" data-case="${esc(x.id)}">Review</button></td></tr>`).join('')||'<tr><td colspan="4">No loaded exceptions.</td></tr>';
  $('custody').innerHTML=state.custody.map(x=>`<tr><td>${esc(assets.get(x.asset_id)||x.asset_id)}</td><td>${esc(x.holder)}</td><td>${esc(x.state)}</td><td>${x.state==='active'&&canOperate()?`<button class="small" data-return="${esc(x.id)}">Return</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="4">No loaded custody.</td></tr>';
  $('jobs').innerHTML=state.jobs.map(x=>`<tr><td>${esc(x.external_ref)}</td><td>${esc(x.title)}</td><td>${esc(x.state)}</td><td>${x.state!=='completed'&&canOperate()?`<button class="small" data-complete="${esc(x.id)}">Complete</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="4">No loaded work orders.</td></tr>';
  const jobRefs=new Map(state.jobs.map(x=>[x.id,x.external_ref]));
- $('evidence').innerHTML=state.evidence.map(x=>`<tr><td>${esc(x.received_at)}</td><td>${esc(assets.get(x.asset_id)||'—')}</td><td>${esc(jobRefs.get(x.job_id)||'—')}</td><td>${esc(x.source)}</td><td>${esc(x.event_type)}</td><td>${esc(x.source_event_id)}</td></tr>`).join('')||'<tr><td colspan="6">No loaded evidence.</td></tr>';
- $('audit').innerHTML=state.audit.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.actor_id||'Legacy unattributed')}</td><td>${esc(x.entity)} · ${esc(x.entity_id)}</td><td>${esc(x.action)}</td></tr>`).join('')||'<tr><td colspan="4">No loaded audit events.</td></tr>';
+ $('evidence').innerHTML=state.evidence.map(x=>`<tr><td title="${esc(x.received_at)}">${esc(displayTime(x.received_at))}</td><td>${esc(assets.get(x.asset_id)||'—')}</td><td>${esc(jobRefs.get(x.job_id)||'—')}</td><td>${esc(x.source)}</td><td>${esc(x.event_type)}</td><td>${esc(x.source_event_id)}</td></tr>`).join('')||'<tr><td colspan="6">No loaded evidence.</td></tr>';
+ $('audit').innerHTML=state.audit.map(x=>`<tr><td title="${esc(x.created_at)}">${esc(displayTime(x.created_at))}</td><td>${esc(credentialNames.get(x.actor_id)||(x.actor_id==='platform:local-recovery'?'Deployment operator':x.actor_id||'Legacy unattributed'))}</td><td>${esc(x.entity)} · ${esc(x.entity_id)}</td><td>${esc(x.action)}</td></tr>`).join('')||'<tr><td colspan="4">No loaded audit events.</td></tr>';
  $('paging').replaceChildren();
  Object.keys(state).forEach(k=>{const b=document.createElement('button');b.textContent=`More ${k} (${state[k].length} loaded)`;b.disabled=!pages[k]||!identity;b.onclick=()=>busy(b,async()=>{const rows=await api(k+'?limit=200&offset='+offsets[k]);offsets[k]+=rows.length;const known=new Set(state[k].map(x=>x.id));state[k].push(...rows.filter(x=>!known.has(x.id)));pages[k]=rows.length===200;draw();});$('paging').append(b);});
  permissions();
@@ -91,6 +95,7 @@ async function loadCredentials(){
  const rows=await api('credentials');
  credentialNames.clear();rows.forEach(x=>credentialNames.set(x.id,x.name));
  $('credentials').innerHTML=rows.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.role)} ${esc(x.source||'')} ${esc(x.scope||'')}</td><td>${x.revoked_at?'Revoked':x.expires_at?'Expires '+esc(x.expires_at):'Active'}</td><td>${x.revoked_at?'—':`<button type="button" data-revoke="${esc(x.id)}">Revoke</button>`}</td></tr>`).join('');
+ draw();
 }
 $('connect').onclick=()=>busy($('connect'),async()=>{const next=$('token').value.trim();disconnect('Connecting…');bearer=next;await refresh();});
 $('logout').onclick=()=>disconnect();$('refresh').onclick=()=>busy($('refresh'),refresh);

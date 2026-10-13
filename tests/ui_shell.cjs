@@ -44,5 +44,16 @@ assert.equal(document.querySelector('#geo-tiles').disabled,true);
 document.querySelector('[data-go="assets"]').click();
 assert.equal(document.querySelector('[data-screen="assets"]').hidden, false);
 assert.equal(document.querySelector('#current-view').textContent,'Equipment & custody');
+dom.window.dispatchEvent(new dom.window.CustomEvent('rally:state',{detail:{
+ identity:{name:'QA operator',role:'admin',tenant_id:'qa'},
+ stats:{assets:1,jobs:1,active_custody:1,open_cases:1,evidence_events:1},
+ assets:[{id:'a-1',tag:'CAM-001',name:'Inspection camera',status:'ready'}],
+ custody:[{id:'c-1',asset_id:'a-1',holder:'Technician A',state:'active'}],
+ coverage:[{source:'traccar',coverage:'stale',name:'GPS adapter'}]
+}}));
+assert.match(document.querySelector('#asset-register').textContent,/CAM-001/);
+assert.match(document.querySelector('#asset-register').textContent,/Technician A/);
+assert.match(document.querySelector('#overview-attention').textContent,/1 exception/);
+assert.match(document.querySelector('#source-traccar').textContent,/Configured/);
 console.log('Rally: eight routes, preserved forms, safe empty GPS view and navigation passed.');
 dom.window.close();
