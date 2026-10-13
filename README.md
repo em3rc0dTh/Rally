@@ -32,9 +32,12 @@ Python 3.11+ (container uses 3.12). Generate an administrator secret; do not com
 git clone https://github.com/em3rc0dTh/Rally.git
 cd Rally
 cp .env.example .env
-# Set RALLY_ADMIN_KEY to a random secret of at least 32 characters.
-# Example generation: python -c 'import secrets; print(secrets.token_hex(32))'
+# Create a unique local administrator secret. Do not commit .env.
+python3 -c 'from pathlib import Path; import secrets; p=Path(".env"); s=p.read_text(); assert "RALLY_ADMIN_KEY=" in s; p.write_text(s.replace("RALLY_ADMIN_KEY=", "RALLY_ADMIN_KEY="+secrets.token_hex(32), 1))'
+chmod 600 .env
 docker compose up --build -d
+docker compose ps
+curl --fail-with-body http://127.0.0.1:8080/healthz
 ```
 
 Open http://127.0.0.1:8080. The worker reconciles every 60 seconds. SQLite uses a named Docker volume. For existing MK0 `./data/rally.db`, follow the migration instructions; a new named volume does not automatically contain the old bind-mounted database.
@@ -51,6 +54,15 @@ uv run --no-sync python -m rally.worker
 
 Local API docs: `/docs`. Liveness: `/healthz`; database + worker readiness: `/readyz`.
 
+### WSL / Windows troubleshooting
+
+If Windows shows `ERR_CONNECTION_REFUSED` at `http://localhost:8080`, check `docker compose ps` and `docker compose logs --tail=80 rally` **inside WSL** first. A completed Docker image build is not evidence that the server is running. When `RALLY_ADMIN_KEY` is absent/blank, Rally refuses startup; the local Compose file now rejects blank values immediately, before creating containers.
+
+If the containers are healthy, first confirm `curl -i http://127.0.0.1:8080/healthz` from WSL. The development stack publishes `127.0.0.1:8080:8080` on the Docker host. If WSL can reach that endpoint but the Windows browser cannot, verify Docker Desktop's WSL integration, Windows localhost forwarding and any proxy/firewall settings rather than changing the application's database or security configuration.
+
+The container worker and API share the same .env. After changing the secret use `docker compose up -d --force-recreate`. Never copy test or example secrets into a customer deployment.
+
+
 ## Bootstrap
 
 ```bash
@@ -59,7 +71,7 @@ curl --fail-with-body http://127.0.0.1:8080/api/tenants \
   -d '{"name":"Operations"}'
 ```
 
-Save the one-time `api_token`. Connect with it in Mission Control, create individual credentials in Access management, then revoke the bootstrap credential after creating another administrator. Use `Authorization: Bearer TOKEN` for API access. Custody commands also require `Idempotency-Key` (8–128 characters); preserve it after uncertain responses.
+The bootstrap `curl` command uses your shell variable `$RALLY_ADMIN_KEY`. To load the same value saved in `.env`, first run `set -a; . ./.env; set +a` in the WSL terminal (do not echo or post the secret). Save the one-time `api_token`. Connect with it in Mission Control, create individual credentials in Access management, then revoke the bootstrap credential after creating another administrator. Use `Authorization: Bearer TOKEN` for API access. Custody commands also require `Idempotency-Key` (8–128 characters); preserve it after uncertain responses.
 
 Create assets and work orders → issue equipment → record observations → complete work → inspect exceptions → return equipment → reconciliation verifies resolution. Acknowledging an exception assigns responsibility; it does not waive the discrepancy.
 

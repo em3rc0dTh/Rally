@@ -5,6 +5,8 @@ x-app: &app
   env_file: .env
   environment:
     RALLY_DB_PATH: /data/rally.db
+    # Fail before container startup when the local .env secret is blank.
+    RALLY_ADMIN_KEY: ${RALLY_ADMIN_KEY:?Set RALLY_ADMIN_KEY in .env to a random value of at least 32 characters}
   volumes:
     - rally_data:/data
   security_opt: ["no-new-privileges:true"]
