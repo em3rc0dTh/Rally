@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Disposable production-configuration rehearsal. NO customer services.
 set -euo pipefail
-project="rally-release-ci-$"
+project="rally-release-ci-$RANDOM"
 export COMPOSE_PROJECT_NAME="$project"
 backup_path=""
 if [[ -e .env.production ]]; then
