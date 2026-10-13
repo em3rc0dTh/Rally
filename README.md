@@ -92,3 +92,8 @@ Point the domain to the host and permit ports 80/443. PostgreSQL and the API hav
 | [Release record](docs/11-release-0.2.md) | Changes and exact verification limits |
 
 `odoo-engineering` remains external: https://github.com/Em3rc0d/odoo-engineering. No third-party vendor tree is copied into Rally. Public availability does not grant a license to Rally-authored source; a commercial/public license and trademark clearance remain owner decisions.
+
+
+## Release-candidate hardening
+
+The pre-test production candidate separates the PostgreSQL bootstrap account from the `rally_app` runtime role, segregates proxy and database networks, binds custody return audits to the authenticated operator, and bounds the on-disk RFID event queue. These post-CI changes have **not been tested**, per the requested release workflow. See `docs/14-release-candidate.md` for the precise acceptance boundary.

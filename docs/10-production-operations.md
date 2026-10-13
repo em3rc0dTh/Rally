@@ -123,3 +123,8 @@ New database volumes run `ops/initdb/01-runtime-role.sh` once, during PostgreSQL
 **Breaking upgrade requirement:** Docker does not rerun initialization scripts on existing PostgreSQL volumes. Never delete an existing volume or automatically reassign table ownership. If an installation exists on the prior bootstrap-only database layout, back up and validate restoration, then migrate schema/table ownership to `rally_app` under an independently reviewed change plan before switching both API and worker. New empty installations provision automatically.
 
 Restore scripts make separately restored databases and their objects owned by `rally_app`. The new initialization script and live PostgreSQL user ownership have NOT been executed or certified in this no-tests development phase.
+
+
+## Production network segmentation
+
+Production Compose separates the Caddy/public frontend network from the internal PostgreSQL backend network. The API joins both networks; the reconciliation worker and database are backend-only. A public proxy cannot directly reach PostgreSQL. The RFID edge uses `RFID_MAX_SPOOL_BYTES` (default 256 MiB) and 64 KiB maximum input records; reserve additional filesystem space for SQLite journaling and stop accepting data when the limit is reached, rather than discarding pending events.

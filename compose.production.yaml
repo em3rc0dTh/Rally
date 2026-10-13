@@ -34,6 +34,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./ops/initdb:/docker-entrypoint-initdb.d:ro
+    networks: [rally_backend]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rally -d rally"]
       interval: 10s
@@ -45,15 +46,18 @@ services:
       options: {max-size: "10m", max-file: "3"}
   rally:
     <<: *app
+    networks: [rally_frontend, rally_backend]
     # All clients traverse Caddy. Never publish the internal API port.
     command: ["uvicorn", "rally.app:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log", "--proxy-headers", "--forwarded-allow-ips=*", "--limit-concurrency", "100", "--timeout-keep-alive", "5"]
   worker:
     <<: *app
+    networks: [rally_backend]
     command: ["python", "-m", "rally.worker"]
     healthcheck:
       disable: true
   caddy:
     image: caddy:2-alpine
+    networks: [rally_frontend]
     restart: unless-stopped
     environment:
       RALLY_DOMAIN: ${RALLY_DOMAIN:?Required}
@@ -69,3 +73,8 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+
+networks:
+  rally_frontend: {}
+  rally_backend:
+    internal: true
