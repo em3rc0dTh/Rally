@@ -13,6 +13,9 @@ jobs:
       - name: Install app and test dependencies
         run: python -m pip install -e '.[test]'
       - name: Compile Python
-        run: python -m compileall -q rally tests
+        run: python -m compileall -q rally adapters workflows tests
       - name: Run tests
         run: python -m pytest -q
+
+      - name: Build local container image
+        run: docker build -t rally-mk0:ci .
