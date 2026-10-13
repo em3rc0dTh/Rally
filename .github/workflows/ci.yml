@@ -50,6 +50,16 @@ jobs:
           RALLY_DOMAIN: rally.example.com
           ACME_EMAIL: ci@example.com
         run: docker compose -f compose.production.yaml config --quiet
+      - name: Validate self-hosted Traccar overlay
+        env:
+          RALLY_ADMIN_KEY: "integration-only-abcdefghijklmnopqrstuv1234567890"
+        run: |
+          cp .env.example .env
+          cp .env.traccar.example .env.traccar
+          docker compose -f compose.yaml -f compose.traccar.yaml --profile gps-sync config --quiet
+          docker compose -f compose.yaml -f compose.traccar.yaml --profile gps-sync config --format json > /tmp/rally-traccar-compose.json
+          python -c "import json; c=json.load(open('/tmp/rally-traccar-compose.json')); s=c['services']; assert s['traccar']['image']=='traccar/traccar:6.16.0-alpine'; assert s['rally']['environment']['RALLY_ALLOWED_HOSTS'].endswith('rally'); assert s['traccar-sync']['environment']['RALLY_URL']=='http://rally:8080'; print('Local GPS overlay validated')"
+          rm -f .env .env.traccar /tmp/rally-traccar-compose.json
       - name: Build application container
         run: docker build -t rally-ci:latest .
       - name: Verify installed Docker UI assets

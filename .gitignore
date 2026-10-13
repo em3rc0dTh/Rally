@@ -17,3 +17,5 @@ backups/
 *.egg-info/
 build/
 dist/
+
+!.env.traccar.example

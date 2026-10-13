@@ -9,6 +9,10 @@ A redesigned left-navigation workspace now separates overview, work orders, asse
 
 See [Mission Control 0.3](docs/16-mission-control-ui.md) for UX architecture, official Traccar/Odoo/Leaflet references, data-quality semantics and local startup.
 
+## Self-hosted Traccar local GPS lab
+
+Run an official, pinned Traccar server next to Rally using `compose.traccar.yaml`; its standalone persistent volume and loopback-only web UI do not change Rally's data. Optional tenant-scoped polling bridges real phone coordinates into Fleet & GPS. See [self-hosted Traccar setup](docs/17-traccar-self-hosted.md) for Windows/WSL ports, device IDs, API tokens and safety limitations. **This is a local lab, not a production tracking deployment.**
+
 ## Release 0.2
 
 - PostgreSQL production persistence with versioned migrations, tenant foreign keys and transactionally serialized writes. SQLite remains available for local development.

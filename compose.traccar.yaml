@@ -1,0 +1,59 @@
+# Optional LOCAL-ONLY Traccar lab overlay for the existing Rally Compose project.
+# Never combine this file with compose.production.yaml.
+# First create a protected .env.traccar from .env.traccar.example.
+# traccar-sync is opt-in: only started with --profile gps-sync.
+services:
+  rally:
+    environment:
+      # Allow requests from traccar-sync over Compose's isolated service network.
+      RALLY_ALLOWED_HOSTS: localhost,127.0.0.1,testserver,rally
+
+  traccar:
+    image: traccar/traccar:6.16.0-alpine
+    restart: unless-stopped
+    ports:
+      # Traccar admin interface stays on this computer.
+      - "127.0.0.1:8082:8082"
+      # Client OsmAnd HTTP protocol. Default is loopback ONLY.
+      # For a phone on trusted Wi-Fi, explicitly set TRACCAR_DEVICE_BIND=0.0.0.0
+      # in the ignored root .env and apply appropriate Windows firewall rules.
+      - "${TRACCAR_DEVICE_BIND:-127.0.0.1}:5055:5055/tcp"
+    volumes:
+      - traccar_data:/opt/traccar/data
+      - traccar_logs:/opt/traccar/logs
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  traccar-sync:
+    profiles: [gps-sync]
+    build: .
+    command: ["python", "-m", "adapters.runner"]
+    restart: unless-stopped
+    env_file:
+      - .env.traccar
+    environment:
+      RALLY_CONNECTOR: traccar
+      RALLY_CONNECTOR_SECONDS: ${TRACCAR_POLL_SECONDS:-60}
+      RALLY_ALLOW_INTERNAL_HTTP: "1"
+      TRACCAR_URL: http://traccar:8082
+      RALLY_URL: http://rally:8080
+      # Stable source namespace; don't change when moving this lab.
+      TRACCAR_INSTANCE: rally-local-traccar
+    depends_on:
+      rally:
+        condition: service_healthy
+      traccar:
+        condition: service_started
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+volumes:
+  traccar_data:
+  traccar_logs:

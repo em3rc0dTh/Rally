@@ -63,3 +63,8 @@ Traccar health is **degraded** when no mapped device positions arrive, mapped de
 ### Required work-order selection (fail-closed)
 
 A confirmed Odoo sale may contain stock-only goods and is **not necessarily a field-service job**. Configure `ODOO_WORKORDER_DOMAIN_JSON` as a nonempty JSON array of simple Odoo domain clauses, explicitly agreed with the customer and supported by their installed Odoo edition/modules. Example: `[["x_rally_work_order","=",true]]` for a customer-owned Boolean field. Without this selector, the Odoo importer refuses to run. The importer rechecks returned `company_id` values against the configured company allowlist. Real field semantics must be verified against the target Odoo system.
+
+
+## Self-hosted local Traccar server
+
+For Docker on WSL, use [the Traccar self-hosted lab](17-traccar-self-hosted.md). It provides a pinned 6.16.0-alpine Traccar instance, named data/log volumes, local TCP 8082 UI, optional LAN TCP 5055 device receiver, and an opt-in scoped `traccar-sync` poller on the Rally network. This is not a managed SaaS deployment.
