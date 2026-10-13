@@ -32,7 +32,7 @@ jobs:
       - name: Compile Python
         run: python -m compileall -q rally adapters workflows tests
       - name: Check cockpit JavaScript syntax
-        run: node --check rally/web/app.js
+        run: node --check rally/web/app.js && node --check rally/web/shell.js
       - name: Run SQLite and disposable PostgreSQL integration tests
         run: python -m pytest -q
       - name: Verify production configuration rejects placeholders

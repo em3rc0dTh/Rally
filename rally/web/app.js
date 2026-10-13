@@ -8,12 +8,13 @@ const canOperate = () => ['admin','operator'].includes(identity?.role);
 const canReview = () => ['admin','operator','reviewer'].includes(identity?.role);
 function notice(message,bad=false){$('notice').textContent=message;$('notice').className='notice'+(bad?' error':'');}
 function disconnect(message='Disconnected.'){
- bearer='';identity=null;generation++;pending.clear();evidenceDraft=null;selectedCase=null;
+ bearer='';identity=null;generation++;pending.clear();credentialNames?.clear();evidenceDraft=null;selectedCase=null;
  document.querySelectorAll('form').forEach(f=>f.reset());$('token').value='';$('identity').textContent='';
  Object.keys(state).forEach(k=>{state[k]=[];pages[k]=false;offsets[k]=0;});
  ['assets','jobs','custody','cases'].forEach(k=>$('stat-'+k).textContent='—');
  $('credentials').replaceChildren();$('connectors').replaceChildren();$('secret-value').value='';$('new-secret').hidden=true;
  $('case-detail').textContent='';$('case-dialog').close();draw();notice(message);
+ window.dispatchEvent(new Event('rally:disconnect'));
 }
 async function api(path,method='GET',payload=null,idempotent=false){
  if(!bearer)throw new Error('Connect with your personal access token.');
@@ -78,10 +79,16 @@ async function refresh(){
  $('connectors').innerHTML=coverage.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.source)}</td><td>${esc(x.coverage)}<br>${esc(x.detail)}</td><td>${esc(x.last_success||'Never')}</td></tr>`).join('')||'<tr><td colspan="4">No active connector credentials.</td></tr>';
  draw();
  if(identity.role==='admin')await loadCredentials();
+ window.dispatchEvent(new CustomEvent('rally:state',{detail:{
+   identity:who,stats,coverage,assets:state.assets,jobs:state.jobs,
+   custody:state.custody,cases:state.cases,evidence:state.evidence,audit:state.audit
+ }}));
  notice('Operational state loaded.');
 }
+const credentialNames=new Map();
 async function loadCredentials(){
  const rows=await api('credentials');
+ credentialNames.clear();rows.forEach(x=>credentialNames.set(x.id,x.name));
  $('credentials').innerHTML=rows.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.role)} ${esc(x.source||'')} ${esc(x.scope||'')}</td><td>${x.revoked_at?'Revoked':x.expires_at?'Expires '+esc(x.expires_at):'Active'}</td><td>${x.revoked_at?'—':`<button type="button" data-revoke="${esc(x.id)}">Revoke</button>`}</td></tr>`).join('');
 }
 $('connect').onclick=()=>busy($('connect'),async()=>{const next=$('token').value.trim();disconnect('Connecting…');bearer=next;await refresh();});
@@ -91,7 +98,16 @@ document.addEventListener('click',event=>{
  const b=event.target.closest('button');if(!b)return;
  if(b.dataset.return)busy(b,async()=>{await api('custody/return','POST',{custody_id:b.dataset.return},true);await refresh();notice('Return recorded. Automatic reconciliation will clear resolved conditions.');});
  if(b.dataset.complete)busy(b,async()=>{await api('jobs/'+b.dataset.complete+'/complete','POST');await refresh();});
- if(b.dataset.case)busy(b,async()=>{selectedCase=b.dataset.case;const c=await api('cases/'+selectedCase);$('case-detail').textContent=[c.description,'State: '+c.state,'Condition: '+c.fingerprint,'Owner: '+(c.owner_id||'Unassigned'),...c.notes.map(n=>n.created_at+' · '+n.actor_id+'\n'+n.note)].join('\n\n');$('case-dialog').showModal();});
+ if(b.dataset.case)busy(b,async()=>{
+   selectedCase=b.dataset.case;
+   const c=await api('cases/'+selectedCase);
+   const displayActor=x=>credentialNames.get(x)||x||'Unassigned';
+   $('case-detail').textContent=[c.description,'State: '+c.state,'Condition: '+c.fingerprint,
+      'Owner: '+displayActor(c.owner_id),
+      ...c.notes.map(n=>n.created_at+' · '+displayActor(n.actor_id)+'\n'+n.note)].join('\n\n');
+   $('case-action').hidden=c.state==='resolved'||!canReview();
+   $('case-dialog').showModal();
+ });
  if(b.dataset.revoke&&confirm('Revoke this credential?'))busy(b,async()=>{const id=b.dataset.revoke;await api('credentials/'+id+'/revoke','POST');if(id===identity.id)disconnect('Your credential was revoked.');else await loadCredentials();});
 });
 $('close-case').onclick=()=>$('case-dialog').close();

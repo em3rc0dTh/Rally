@@ -50,9 +50,9 @@ class GuardMiddleware:
                 headers = list(message.get('headers', []))
                 headers.extend([
                     (b'x-request-id', request_id.encode()), (b'x-content-type-options', b'nosniff'),
-                    (b'x-frame-options', b'DENY'), (b'referrer-policy', b'no-referrer'),
+                    (b'x-frame-options', b'DENY'), (b'referrer-policy', b'strict-origin-when-cross-origin' if path == '/' or path.startswith('/static/') else b'no-referrer'),
                     (b'cache-control', b'no-store'),
-                    (b'content-security-policy', (b"default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; frame-ancestors 'none'" if path.startswith('/docs') and os.getenv('RALLY_ENV') != 'production' else b"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")),
+                    (b'content-security-policy', (b"default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; frame-ancestors 'none'" if path.startswith('/docs') and os.getenv('RALLY_ENV') != 'production' else b"default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https://unpkg.com https://tile.openstreetmap.org; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")),
                     (b'permissions-policy', b'camera=(), microphone=(), geolocation=()'),
                 ])
                 if os.getenv('RALLY_ENV') == 'production':

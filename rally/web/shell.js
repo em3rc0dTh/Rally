@@ -55,7 +55,7 @@
   const sidebar = el('aside');
   sidebar.id = 'rally-sidebar';
   sidebar.setAttribute('aria-label','Mission Control navigation');
-  sidebar.innerHTML = \`
+  sidebar.innerHTML = `
     <div class="shell-brand"><strong>R<em>Λ</em>LLY</strong><small>Mission Control · Operations</small></div>
     <div>
       <div class="nav-group-title">Workspace</div>
@@ -73,27 +73,27 @@
     <div class="sidebar-footer"><span class="shell-label">Source transparency</span>
       <p>ERP intent ≠ field observation.<br>Observations ≠ verified business completion.</p>
       <div id="sidebar-status" class="signal"><span class="signal-dot off"></span> Not connected</div>
-    </div>\`;
+    </div>`;
   const workspace = el('div');
   workspace.id='rally-shell-main';
   const topbar = el('div','shell-topbar');
-  topbar.innerHTML = \`
+  topbar.innerHTML = `
     <div><div id="current-view" class="shell-topbar-title">Overview</div>
          <div id="current-sub" class="shell-topbar-sub">Business assurance at a glance</div></div>
     <div class="topbar-actions">
       <span id="tenant-chip" class="tenant-chip" title="Current tenant">Not connected</span>
       <span id="source-chip" class="source-chip">Sources · unknown</span>
       <button id="global-refresh" type="button" aria-label="Refresh data">↻ Refresh</button>
-    </div>\`;
+    </div>`;
   wrapper.append(sidebar,workspace);
   workspace.append(topbar,main);
   document.body.append(wrapper);
   const makePage = (key, title, text) => {
     const p = el('section','screen-stack');
     p.dataset.screen=key;
-    const h=el('div','screen-head',\`<div>
-      <div class="screen-eyebrow">Rally / \${title}</div>
-      <h1>\${title}</h1><p>\${text}</p></div>\`);
+    const h=el('div','screen-head',`<div>
+      <div class="screen-eyebrow">Rally / ${title}</div>
+      <h1>${title}</h1><p>${text}</p></div>`);
     p.append(h);main.append(p);pages.set(key,p);return p;
   };
   const dual = (page, ...parts) => {
@@ -105,17 +105,17 @@
     'One accountable picture of orders, people, equipment, observations and unresolved exceptions.');
   overview.append(panels.auth, panels.overviewHead, panels.kpis);
   const journey=el('section','command-section');
-  journey.innerHTML = \`<h2>Execution lifecycle</h2>
+  journey.innerHTML = `<h2>Execution lifecycle</h2>
     <div class="product-journey">
       <button class="journey-step" data-go="work"><span class="sequence">01 / INTENT</span><strong>Register the job</strong><p>Capture what the customer or ERP committed to.</p></button>
       <button class="journey-step" data-go="assets"><span class="sequence">02 / ALLOCATION</span><strong>Assign custody</strong><p>Link accountable people and equipment to a job.</p></button>
       <button class="journey-step" data-go="fleet"><span class="sequence">03 / FIELD SIGNALS</span><strong>Observe reality</strong><p>Inspect device-reported GPS and integration coverage.</p></button>
       <button class="journey-step" data-go="exceptions"><span class="sequence">04 / DISCREPANCY</span><strong>Detect exceptions</strong><p>Identify outstanding return and work contradictions.</p></button>
       <button class="journey-step" data-go="evidence"><span class="sequence">05 / PROOF</span><strong>Verify resolution</strong><p>Reconcile against authoritative state and retain the audit.</p></button>
-    </div>\`;
+    </div>`;
   overview.append(journey);
   const boards=el('div','command-grid');
-  boards.innerHTML=\`
+  boards.innerHTML=`
     <div class="command-box"><span class="screen-eyebrow">Attention queue</span>
       <h3 id="overview-attention">Connect a workspace to start</h3>
       <p id="overview-action-text">Exceptions remain open until the underlying condition is cleared. Acknowledgment alone does not resolve them.</p>
@@ -125,7 +125,7 @@
       <div class="metric-line"><span>Active connectors</span><strong id="overview-connector-count">—</strong></div>
       <div class="metric-line"><span>Recent GPS positions</span><strong id="overview-position-count">—</strong></div>
       <div class="metric-line"><span>Evidence ledger</span><strong id="overview-evidence-count">—</strong></div>
-      <button data-go="integrations" type="button">Inspect source coverage ↗</button></div>\`;
+      <button data-go="integrations" type="button">Inspect source coverage ↗</button></div>`;
   overview.append(boards);
 
   const work=makePage('work','Work orders','Create operational intent, complete jobs and inspect business commitments.');
@@ -143,7 +143,7 @@
   const fleet=makePage('fleet','Fleet & GPS',
     'A geographic view of recorded GPS/Traccar observations. No simulated vehicles or invented live locations.');
   const mapView=el('div','map-overview');
-  mapView.innerHTML=\`
+  mapView.innerHTML=`
     <div>
       <div class="geo-canvas" id="geo-canvas" role="region" aria-label="Geographic device overview">
         <span id="geo-map-head" class="geo-map-head">No live tracking connection</span>
@@ -164,12 +164,12 @@
         <button id="geo-tiles" type="button" disabled>Show street map</button>
       </div>
       <p class="geo-legal" id="geo-tile-state">Public map tiles require explicit opt-in and must comply with provider terms.</p>
-    </aside>\`;
+    </aside>`;
   fleet.append(mapView);
   const integrations=makePage('integrations','Integrations',
     'Connect established tools rather than rebuilding ERP or GPS infrastructure.');
   const integrationCards=el('div','integration-grid');
-  integrationCards.innerHTML=\`
+  integrationCards.innerHTML=`
     <div class="integration-card"><span class="shell-label">ERP · Business intent</span><h3>Odoo 19</h3>
       <span id="source-odoo" class="badge">Not connected</span>
       <p>Read confirmed, explicitly selected service orders from the customer's Odoo database. Restricted API credentials and instance scope required.</p>
@@ -181,7 +181,7 @@
     <div class="integration-card"><span class="shell-label">Physical · Device sighting</span><h3>RFID / QR</h3>
       <span id="source-rfid" class="badge">Not connected</span>
       <p>Edge readings and manual observations are evidence inputs, never an automatic custody handover or return.</p>
-      <button type="button" data-go="evidence">Inspect evidence ↗</button></div>\`;
+      <button type="button" data-go="evidence">Inspect evidence ↗</button></div>`;
   integrations.append(integrationCards,panels.connectorsHead,panels.connectors);
   const governance=makePage('governance','Audit & access','Review the chain of accountability and manage individual access permissions.');
   governance.append(panels.auditHead,panels.audit,panels.access);
@@ -257,11 +257,11 @@
     byId('overview-position-count').textContent='—';
     renderGeo();
   });
-  const pointMarkup = row => \`
-    <div class="geo-device"><strong>\${safe(row.asset_tag||'Unmapped device')} · \${safe(row.device_id)}</strong>
-      <small>\${safe(row.source)} · \${safe(asLocal(row.observed_at))}<br>
-      \${Number(row.latitude).toFixed(5)}, \${Number(row.longitude).toFixed(5)}</small>
-      <span class="geo-label \${row.quality==='current'?'':'stale'}">\${row.quality==='current'?'Fresh reported fix':'Stale / unverified fix'}</span></div>\`;
+  const pointMarkup = row => `
+    <div class="geo-device"><strong>${safe(row.asset_tag||'Unmapped device')} · ${safe(row.device_id)}</strong>
+      <small>${safe(row.source)} · ${safe(asLocal(row.observed_at))}<br>
+      ${Number(row.latitude).toFixed(5)}, ${Number(row.longitude).toFixed(5)}</small>
+      <span class="geo-label ${row.quality==='current'?'':'stale'}">${row.quality==='current'?'Fresh reported fix':'Stale / unverified fix'}</span></div>`;
   function renderGeo(){
     const list=byId('geo-device-list'),blank=byId('geo-empty'),overlay=byId('geo-overlays');
     const button=byId('geo-tiles'),canvas=byId('geo-canvas');
