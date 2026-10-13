@@ -18,6 +18,7 @@ const payloads={
  'jobs':[{id:'job-01',external_ref:'WO-102',title:'Inspection',state:'completed'}],
  'custody':[{id:'custody-01',asset_id:'asset-01',job_id:'job-01',holder:'Technician A',state:'active'}],
  'cases':[{id:'case-01',severity:'critical',description:'Missing return',state:'open',fingerprint:'completed_job:custody-01',last_seen:fixedAt}],
+ 'cases/case-01':{id:'case-01',severity:'critical',description:'Missing return',state:'open',fingerprint:'completed_job:custody-01',last_seen:fixedAt,first_seen:fixedAt,owner_id:null,notes:[]},
  'evidence':[],
  'audit':[],
  'credentials':[],
