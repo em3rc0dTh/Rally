@@ -12,6 +12,7 @@ Rally connects ERP commitments to evidence of physical business execution, detec
 | Browser Mission Control cockpit | `web/index.html` | Implemented MK0 |
 | Evidence ingestion, deduplication, reconciliation, audit | `rally/app.py` | Implemented MK0 |
 | Odoo 19 JSON-2 data fetch | `adapters/odoo_json2.py` | Read-only code; live credentials not tested |
+| One-shot confirmed Odoo sale → Rally work-order import | `adapters/odoo_sync_cli.py` | Code implemented; live Odoo unverified |
 | Traccar GPS fetch and one-shot import | `adapters/traccar.py`, `adapters/ingest_cli.py` | Code implemented; live provider not validated |
 | RFID normalized event and stdin import | `adapters/rfid.py`, `adapters/rfid_ingest_cli.py` | Code implemented; physical readers not integrated |
 | Temporal recovery | `workflows/` | Optional research prototype; NOT wired into main API |

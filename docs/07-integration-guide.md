@@ -26,7 +26,18 @@ async def main():
 asyncio.run(main())
 ~~~
 
-Use HTTPS and a narrowly restricted integration account. Validate Odoo external API availability for the actual deployment/plan. The adapter calls `/json/2/sale.order/search_read`. It **does not yet sync** these records into Rally work orders; add a stable tenant+database+model+record external-ID mapping first. Don't assume that all instances expose exactly the same fields/extensions.
+Use HTTPS and a narrowly restricted integration account. Validate Odoo external API availability for the actual deployment/plan. The adapter calls `/json/2/sale.order/search_read`. A **one-shot importer** maps up to 500 confirmed Odoo sales into Rally work-order intent, keyed as database + model + record ID. It does NOT provide continuous sync, full pagination or Odoo status updates:
+
+~~~bash
+export ODOO_URL=https://your-odoo-instance
+export ODOO_DATABASE=your_database
+export ODOO_API_KEY=YOUR_RESTRICTED_API_KEY
+export RALLY_URL=http://127.0.0.1:8080
+export RALLY_TENANT_TOKEN=YOUR_RALLY_TOKEN
+python -m adapters.odoo_sync_cli
+~~~
+
+Use a controlled Odoo environment; real provider compatibility remains unverified.
 
 Odoo JSON-2 documentation: https://www.odoo.com/documentation/19.0/developer/reference/external_api.html
 
@@ -73,3 +84,19 @@ Temporal workflow sample in `workflows/` is an **optional example of a durable h
 ## Production guidance
 
 One instance, loopback-only Docker, no externally reachable port. If expanded: move data to PostgreSQL, add versioned migrations, outbox, ingestion worker, background replay, cloud TLS, scopes/RBAC, per-device auth, backups and explicit data retention.
+
+### Optional Temporal case review commands
+
+~~~bash
+python -m pip install -e '.[temporal]'
+# Start a compatible Temporal development server in another process.
+export TEMPORAL_ADDRESS=localhost:7233
+export RALLY_URL=http://127.0.0.1:8080
+export RALLY_TENANT_TOKEN=YOUR_RALLY_TOKEN
+python -m workflows.worker
+# In another shell: start and signal an existing exception case
+python -m workflows.start_review start CASE_UUID
+python -m workflows.start_review approve CASE_UUID
+~~~
+
+This only performs a read-only case recheck following a human signal. It does not automatically recover or edit any ERP record.

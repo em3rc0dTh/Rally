@@ -4,7 +4,7 @@ Read README and docs before implementing or claiming product maturity.
 
 - Mission: verified business execution assurance. Initial vertical: equipment custody linked to work orders.
 - No copying whole upstream GitHub repositories without license and provenance review.
-- Keep ``odoo-engineering`` external; do not move its vendor tree into Rally.
+- Keep `odoo-engineering` external; do not move its vendor tree into Rally.
 - Treat GPS/RFID/QR as **observations**, not conclusive work completion or custody authorization.
 - Changes touching custody must preserve tenant isolation, idempotency and one-active-assignment invariant.
 - Reconciliation must be deterministic and never silently close unresolved exceptions.
