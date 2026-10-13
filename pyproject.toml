@@ -22,4 +22,4 @@ include = ["rally*", "adapters*", "workflows*"]
 exclude = ["web*", "tests*"]
 
 [tool.setuptools.package-data]
-rally = ["web/*.html", "web/*.js"]
+rally = ["web/*.html", "web/*.js", "web/*.css"]

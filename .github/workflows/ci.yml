@@ -52,6 +52,9 @@ jobs:
         run: docker compose -f compose.production.yaml config --quiet
       - name: Build application container
         run: docker build -t rally-ci:latest .
+      - name: Verify installed Docker UI assets
+        run: |
+          docker run --rm --entrypoint python rally-ci:latest -c "from pathlib import Path; import rally; root=Path(rally.__file__).parent/'web'; expected=('index.html','app.js','shell.js','shell.css'); missing=[p for p in expected if not (root/p).is_file()]; assert not missing, 'Packaged UI assets missing: '+', '.join(missing); print('Installed UI assets:', ', '.join(expected))"
       - name: Boot disposable API and reconciliation worker
         run: bash ops/smoke_local.sh
 
