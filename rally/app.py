@@ -162,6 +162,7 @@ def create_asset(body: AssetIn, tid: str = Depends(tenant), db=Depends(get_db)):
     if not tag or not name:
         raise HTTPException(422, "Tag and name are required")
     try:
+        db.execute("BEGIN IMMEDIATE")
         db.execute("INSERT INTO assets(id,tenant_id,tag,name,created_at) VALUES(?,?,?,?,?)",
                    (aid, tid, tag, name, stamp()))
         audit(db, tid, "asset", aid, "registered", {"tag": tag})
@@ -182,6 +183,7 @@ def create_job(body: JobIn, tid: str = Depends(tenant), db=Depends(get_db)):
     if not ref or not title:
         raise HTTPException(422, "Reference and title are required")
     try:
+        db.execute("BEGIN IMMEDIATE")
         db.execute("INSERT INTO jobs(id,tenant_id,external_ref,title,created_at) VALUES(?,?,?,?,?)",
                    (jid, tid, ref, title, stamp()))
         audit(db, tid, "job", jid, "planned", {"external_ref": ref})
@@ -220,6 +222,8 @@ def issue(body: IssueIn, idempotency_key: str | None = Header(default=None, alia
             job = within_tenant(db, "jobs", tid, body.job_id)
             if job["state"] == "completed":
                 raise HTTPException(409, "Cannot issue to a completed work order")
+        if not body.holder.strip():
+            raise HTTPException(422, "Holder must not be blank")
         if due and due <= stamp():
             raise HTTPException(422, "Due date must be in the future")
         cid = uid()
@@ -270,6 +274,7 @@ def append_evidence(body: EvidenceIn, tid: str = Depends(tenant), db=Depends(get
         return current
     eid = uid()
     try:
+        db.execute("BEGIN IMMEDIATE")
         db.execute(
             "INSERT INTO evidence(id,tenant_id,asset_id,job_id,source,source_event_id,event_type,observed_at,payload,received_at) "
             "VALUES(?,?,?,?,?,?,?,?,?,?)",
