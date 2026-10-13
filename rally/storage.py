@@ -104,6 +104,7 @@ class Connection:
         self.actor_id = 'system'
         self.actor_role = 'system'
         self.actor_source = None
+        self.actor_scope = None
 
     def execute(self, sql, args=()):
         if self.postgres:
@@ -200,6 +201,11 @@ def initialize(path=None):
             if 5 not in versions:
                 db.execute("ALTER TABLE jobs ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
                 db.execute('INSERT INTO schema_migrations(version) VALUES(5)')
+            # Version 6: each Odoo connector is limited to exactly one ERP namespace.
+            # Preexisting Odoo tokens have no scope: revoke/reissue after upgrade.
+            if 6 not in versions:
+                db.execute("ALTER TABLE credentials ADD COLUMN scope TEXT")
+                db.execute('INSERT INTO schema_migrations(version) VALUES(6)')
 
 
 def get_db():

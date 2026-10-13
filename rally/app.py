@@ -110,9 +110,10 @@ def tenant(request: Request, authorization: str | None = Header(default=None), d
             allowed = path in {"/api/evidence", "/api/connectors/heartbeat"} or (row["source"] == "odoo" and path == "/api/jobs/import")
         if not allowed:
             raise HTTPException(403, "Credential role does not permit this operation")
-    elif role == "connector" and path not in {"/api/me", "/api/connectors"}:
+    elif role == "connector" and path != "/api/me":
         raise HTTPException(403, "Connector credentials cannot browse operational data")
     db.actor_id, db.actor_role, db.actor_source = row["id"], role, row["source"]
+    db.actor_scope = row["scope"]
     return row["tenant_id"]
 
 
@@ -391,6 +392,7 @@ class CredentialIn(Input):
     name: str = Field(min_length=2, max_length=120)
     role: Literal['admin', 'operator', 'reviewer', 'viewer', 'connector']
     source: Literal['odoo', 'traccar', 'gps', 'rfid'] | None = None
+    scope: str | None = Field(default=None, max_length=128)
     expires_at: datetime | None = None
 
 
@@ -420,21 +422,27 @@ def me(tid=Depends(tenant), db=Depends(get_db)):
 
 @app.get('/api/credentials')
 def credentials(tid=Depends(tenant_admin), db=Depends(get_db)):
-    return all_rows(db, 'SELECT id,name,role,source,created_at,expires_at,revoked_at FROM credentials WHERE tenant_id=? ORDER BY created_at,id', (tid,))
+    return all_rows(db, 'SELECT id,name,role,source,scope,created_at,expires_at,revoked_at FROM credentials WHERE tenant_id=? ORDER BY created_at,id', (tid,))
 
 
 @app.post('/api/credentials', status_code=201)
 def create_credential(body: CredentialIn, tid=Depends(tenant_admin), db=Depends(get_db)):
     if (body.role == 'connector') != bool(body.source):
         raise HTTPException(422, 'Only connector credentials require a source')
+    if body.role == 'connector' and body.source == 'odoo':
+        if not body.scope or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", body.scope):
+            raise HTTPException(422, 'Odoo credentials require an explicit instance scope')
+    elif body.scope:
+        raise HTTPException(422, 'An instance scope is only supported for Odoo credentials')
     expires = normalized_time(body.expires_at)
     if expires and expires <= stamp():
         raise HTTPException(422, 'Expiry must be in the future')
     raw, cid = token_urlsafe(48), uid()
     with transaction(db):
-        db.execute('INSERT INTO credentials(id,tenant_id,name,role,source,token_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)',
-                   (cid, tid, body.name, body.role, body.source, sha256(raw.encode()).hexdigest(), stamp(), expires))
-        audit(db, tid, 'credential', cid, 'created', {'name': body.name, 'role': body.role, 'source': body.source})
+        db.execute('INSERT INTO credentials(id,tenant_id,name,role,source,scope,token_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?)',
+                   (cid, tid, body.name, body.role, body.source, body.scope, sha256(raw.encode()).hexdigest(), stamp(), expires))
+        audit(db, tid, 'credential', cid, 'created',
+              {'name': body.name, 'role': body.role, 'source': body.source, 'scope': body.scope})
     return {'id': cid, 'api_token': raw, 'role': body.role, 'name': body.name, 'expires_at': expires}
 
 
@@ -463,6 +471,8 @@ def import_job(body: JobIn, tid=Depends(tenant), db=Depends(get_db)):
     reference = body.external_ref.strip()
     if not re.fullmatch(r"odoo:[A-Za-z0-9_.-]{1,128}:sale[.]order:[1-9][0-9]{0,18}", reference):
         raise HTTPException(422, "Expected odoo:INSTANCE:sale.order:POSITIVE_ID reference")
+    if db.actor_role == 'connector' and db.actor_scope != reference.split(':', 2)[1]:
+        raise HTTPException(403, 'Odoo connector credential is not authorized for this ERP instance')
     with transaction(db):
         old = one(db, 'SELECT * FROM jobs WHERE tenant_id=? AND external_ref=?', (tid, reference))
         if old:

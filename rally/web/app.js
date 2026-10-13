@@ -82,7 +82,7 @@ async function refresh(){
 }
 async function loadCredentials(){
  const rows=await api('credentials');
- $('credentials').innerHTML=rows.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.role)} ${esc(x.source||'')}</td><td>${x.revoked_at?'Revoked':x.expires_at?'Expires '+esc(x.expires_at):'Active'}</td><td>${x.revoked_at?'—':`<button type="button" data-revoke="${esc(x.id)}">Revoke</button>`}</td></tr>`).join('');
+ $('credentials').innerHTML=rows.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.role)} ${esc(x.source||'')} ${esc(x.scope||'')}</td><td>${x.revoked_at?'Revoked':x.expires_at?'Expires '+esc(x.expires_at):'Active'}</td><td>${x.revoked_at?'—':`<button type="button" data-revoke="${esc(x.id)}">Revoke</button>`}</td></tr>`).join('');
 }
 $('connect').onclick=()=>busy($('connect'),async()=>{const next=$('token').value.trim();disconnect('Connecting…');bearer=next;await refresh();});
 $('logout').onclick=()=>disconnect();$('refresh').onclick=()=>busy($('refresh'),refresh);
@@ -105,7 +105,7 @@ form('issue','custody/issue',r=>({asset_id:r.asset_id,job_id:r.job_id||null,hold
 let evidenceDraft=null;
 form('new-evidence','evidence',r=>{const signature=JSON.stringify(r);if(evidenceDraft?.signature!==signature)evidenceDraft={signature,body:{asset_id:r.asset_id||null,job_id:r.job_id||null,source:r.source,source_event_id:crypto.randomUUID(),event_type:r.event_type,observed_at:new Date().toISOString(),payload:{entered_via:'Rally Cockpit',unverified:true}}};return evidenceDraft.body;});
 $('new-evidence').addEventListener('reset',()=>{evidenceDraft=null;});
-$('new-credential').onsubmit=event=>{event.preventDefault();busy(event.target.querySelector('button'),async()=>{const r=Object.fromEntries(new FormData(event.target));const result=await api('credentials','POST',{...r,source:r.source||null,expires_at:r.expires_at?new Date(r.expires_at).toISOString():null});$('secret-value').value=result.api_token;$('new-secret').hidden=false;event.target.reset();await loadCredentials();notice('Credential issued. Save the token now.');});};
+$('new-credential').onsubmit=event=>{event.preventDefault();busy(event.target.querySelector('button'),async()=>{const r=Object.fromEntries(new FormData(event.target));const result=await api('credentials','POST',{...r,source:r.source||null,scope:r.scope||null,expires_at:r.expires_at?new Date(r.expires_at).toISOString():null});$('secret-value').value=result.api_token;$('new-secret').hidden=false;event.target.reset();await loadCredentials();notice('Credential issued. Save the token now.');});};
 $('hide-secret').onclick=()=>{$('secret-value').value='';$('new-secret').hidden=true;};
 // Remove legacy MK0 browser storage. New credentials remain only in memory.
 sessionStorage.removeItem('rally_token');
