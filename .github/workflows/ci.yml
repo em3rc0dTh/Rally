@@ -37,6 +37,7 @@ jobs:
         run: |
           npm install --no-save --ignore-scripts jsdom@26.1.0
           node tests/ui_shell.cjs
+          node tests/ui_dataflow.cjs
       - name: Run SQLite and disposable PostgreSQL integration tests
         run: python -m pytest -q
       - name: Verify production configuration rejects placeholders
