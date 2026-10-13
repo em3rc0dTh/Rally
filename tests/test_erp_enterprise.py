@@ -7,7 +7,7 @@ from adapters.odoo_enterprise_cli import validate_selector, load_config
 from rally.erp_contract import normalize_record, MODEL_CONTRACTS
 
 
-def tenant_credential(api, admin, *, name="Odoo enterprise", role="connector", source="odoo", scope="instance_1"):
+def tenant_credential(api, admin, *, name="Odoo enterprise", role="connector", source="odoo_enterprise", scope="instance_1"):
     data = {"name": name, "role": role}
     if source: data["source"] = source
     if scope: data["scope"] = scope
@@ -89,6 +89,10 @@ def test_erp_grants_snapshots_replay_transition_and_tenant_security(authorized):
     payload = {"instance": "instance_1", "company_id": 7, "model": "purchase.order",
                "record_id": 55, "state": "purchase",
                "source_modified_at": now.isoformat()}
+    _, legacy = tenant_credential(api,admin,name="Legacy Odoo jobs",source="odoo",scope="instance_1")
+    assert api.post("/api/erp/records/import", headers=legacy, json=payload).status_code == 403
+    assert api.post("/api/jobs/import", headers=connector, json={
+        "external_ref":"odoo:instance_1:sale.order:19","title":"Should not be accepted"}).status_code == 403
     assert api.post("/api/erp/records/import", headers=gps, json=payload).status_code == 403
     assert api.post("/api/erp/records/import", headers=admin, json=payload).status_code == 403
     assert api.post("/api/erp/records/import", headers=connector,

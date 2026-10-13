@@ -111,7 +111,8 @@ def tenant(request: Request, authorization: str | None = Header(default=None), d
             allowed = path == "/api/reconcile" or path.startswith("/api/cases/")
         if role == "connector":
             allowed = path in {"/api/evidence", "/api/connectors/heartbeat"} or (
-                row["source"] == "odoo" and path in {"/api/jobs/import", "/api/erp/records/import"})
+                (row["source"] == "odoo" and path == "/api/jobs/import") or
+                (row["source"] == "odoo_enterprise" and path == "/api/erp/records/import"))
         if not allowed:
             raise HTTPException(403, "Credential role does not permit this operation")
     elif role == "connector" and path != "/api/me":
@@ -475,7 +476,7 @@ def overview(tid: str = Depends(tenant), db=Depends(get_db)):
 class CredentialIn(Input):
     name: str = Field(min_length=2, max_length=120)
     role: Literal['admin', 'operator', 'reviewer', 'viewer', 'connector']
-    source: Literal['odoo', 'traccar', 'gps', 'rfid'] | None = None
+    source: Literal['odoo', 'odoo_enterprise', 'traccar', 'gps', 'rfid'] | None = None
     scope: str | None = Field(default=None, max_length=128)
     expires_at: datetime | None = None
 
@@ -513,7 +514,7 @@ def credentials(tid=Depends(tenant_admin), db=Depends(get_db)):
 def create_credential(body: CredentialIn, tid=Depends(tenant_admin), db=Depends(get_db)):
     if (body.role == 'connector') != bool(body.source):
         raise HTTPException(422, 'Only connector credentials require a source')
-    if body.role == 'connector' and body.source == 'odoo':
+    if body.role == 'connector' and body.source in {'odoo', 'odoo_enterprise'}:
         if not body.scope or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", body.scope):
             raise HTTPException(422, 'Odoo credentials require an explicit instance scope')
     elif body.scope:
@@ -613,7 +614,7 @@ def erp_add_grants(body: ERPGrantIn, tid=Depends(tenant_admin), db=Depends(get_d
     with transaction(db):
         cred = one(db, "SELECT id,role,source,scope,revoked_at,expires_at FROM credentials "
                        "WHERE tenant_id=? AND id=?", (tid, body.credential_id))
-        if (not cred or cred["role"] != "connector" or cred["source"] != "odoo"
+        if (not cred or cred["role"] != "connector" or cred["source"] != "odoo_enterprise"
             or not cred["scope"] or cred["revoked_at"]
             or (cred["expires_at"] and cred["expires_at"] <= stamp())):
             raise HTTPException(422, "Active instance-scoped Odoo connector credential required")
@@ -648,7 +649,7 @@ def erp_import_state(body: ERPRecordIn, tid=Depends(tenant), db=Depends(get_db))
 
     This is not a write to Odoo and does not imply fiscal or physical completion.
     """
-    if db.actor_role != "connector" or db.actor_source != "odoo":
+    if db.actor_role != "connector" or db.actor_source != "odoo_enterprise":
         raise HTTPException(403, "Odoo connector credential required")
     if (body.instance != db.actor_scope or not NAMESPACE.fullmatch(body.instance)):
         raise HTTPException(403, "Odoo source instance scope mismatch")
@@ -755,7 +756,7 @@ def erp_add_policy(body: ERPPolicyIn, tid=Depends(tenant_admin), db=Depends(get_
             "SELECT g.credential_id FROM erp_grants g JOIN credentials c "
             "ON c.tenant_id=g.tenant_id AND c.id=g.credential_id "
             "WHERE g.tenant_id=? AND c.scope=? AND g.company_id=? AND g.model=? "
-            "AND c.role='connector' AND c.source='odoo' AND c.revoked_at IS NULL "
+            "AND c.role='connector' AND c.source='odoo_enterprise' AND c.revoked_at IS NULL "
             "AND (c.expires_at IS NULL OR c.expires_at>?)",
             (tid, body.instance, body.company_id, body.model, stamp()))
         if not credential_has_grant:

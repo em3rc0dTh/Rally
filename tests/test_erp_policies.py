@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 def _credential(api, admin):
     response = api.post("/api/credentials", headers=admin,
-        json={"name":"Odoo limited","role":"connector","source":"odoo","scope":"customer_a"})
+        json={"name":"Odoo limited","role":"connector","source":"odoo_enterprise","scope":"customer_a"})
     assert response.status_code==201,response.text
     record=response.json()
     return record["id"], {"Authorization":"Bearer "+record["api_token"]}
