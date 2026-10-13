@@ -109,3 +109,8 @@ No se debe iniciar una instalación de clientes sin revisar configuración y pro
 ### Control de saturación de spool RFID
 
 `RFID_MAX_SPOOL_EVENTS` limita la cola local a 100000 observaciones por defecto; al alcanzar el tope la ingestión deja de confirmar nuevas lecturas. Conservar los eventos pendientes, drenar/restaurar el enlace, ampliar almacenamiento con capacidad documentada y alertar al operador. No borrar la base del spool para recuperar espacio, porque se perderían observaciones aún no entregadas. Las lecturas anteriores al aviso deben contar con confirmación persistente en el dispositivo/edge.
+
+
+### Forward-only schema compatibility
+
+Application startup now fails closed if `schema_migrations` declares a version higher than the supported 6. Never roll back only the image onto a newer database schema: use the approved image for that schema, or restore a verified earlier database copy in a separate database and switch both API and worker. The production environment also refuses obviously low-variability platform administrator secrets. The backup script removes incomplete `.partial` files on failure and refuses an empty dump; this does **not** substitute for scheduled off-host encrypted backup and restore drills.

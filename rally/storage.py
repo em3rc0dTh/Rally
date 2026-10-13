@@ -176,6 +176,9 @@ def initialize(path=None):
         with transaction(db):
             db.execute('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)')
             versions = {r['version'] for r in db.execute('SELECT version FROM schema_migrations').fetchall()}
+            supported = set(range(1, 7))
+            if versions - supported:
+                raise RuntimeError('Database schema is newer than this Rally build; use an approved matching release')
             for version, sql in enumerate(MIGRATIONS, 1):
                 if version in versions:
                     continue

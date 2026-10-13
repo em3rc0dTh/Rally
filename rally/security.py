@@ -16,6 +16,8 @@ def validate_environment():
     if len(secret) < 32 or secret.lower().startswith(('change', 'replace', 'example')):
         raise RuntimeError('RALLY_ADMIN_KEY must contain a strong random secret of at least 32 characters')
     if os.getenv('RALLY_ENV') == 'production':
+        if len(set(secret)) < 10:
+            raise RuntimeError('Production administrator secret must be generated randomly')
         if not os.getenv('RALLY_DATABASE_URL', '').startswith(('postgresql://', 'postgres://')):
             raise RuntimeError('Production requires RALLY_DATABASE_URL with PostgreSQL')
         hosts = os.getenv('RALLY_ALLOWED_HOSTS', '')
