@@ -21,3 +21,6 @@ dist/
 !.env.traccar.example
 
 !.env.odoo-enterprise.example
+
+# Self-hosted Odoo lab local secrets/configuration (never commit)
+.local/

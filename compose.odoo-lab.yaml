@@ -1,0 +1,56 @@
+# OPTIONAL Odoo Community 19 development laboratory.
+# Bring up ONLY with: bash ops/odoo_lab.sh start
+# Never join this PostgreSQL server to Rally's application network.
+# The Odoo HTTP service is loopback-only, with a separate persistent filestore.
+services:
+  odoo-lab-db:
+    profiles: [odoo-lab]
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: odoo_lab
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${ODOO_LAB_DB_PASSWORD:?Use ops/odoo_lab.sh to initialize the lab}
+    volumes:
+      - odoo_lab_pgdata:/var/lib/postgresql/data
+    networks: [odoo_lab_db]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo_lab -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  odoo-lab:
+    profiles: [odoo-lab]
+    image: odoo:19.0-20260908
+    restart: unless-stopped
+    depends_on:
+      odoo-lab-db:
+        condition: service_healthy
+    environment:
+      HOST: odoo-lab-db
+      PORT: "5432"
+      USER: odoo_lab
+      PASSWORD: ${ODOO_LAB_DB_PASSWORD:?Use ops/odoo_lab.sh to initialize the lab}
+    volumes:
+      - odoo_lab_filestore:/var/lib/odoo
+      - ./.local/odoo-lab/odoo.conf:/etc/odoo/odoo.conf:ro
+    ports:
+      - "127.0.0.1:8069:8069"
+    networks: [default, odoo_lab_db]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+networks:
+  odoo_lab_db:
+    internal: true
+
+volumes:
+  odoo_lab_pgdata:
+  odoo_lab_filestore:

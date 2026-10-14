@@ -19,6 +19,18 @@ Rally's Odoo scope is wider than selected work orders: CRM, purchases, inventory
 
 See [Odoo enterprise domain expansion](docs/18-odoo-enterprise-domain-expansion.md) for the source-by-source audit, planned contracts, safety boundaries and delivery plan.
 
+## Odoo 19 Community — optional self-hosted integration lab
+
+An **isolated, opt-in Odoo 19 Community lab** is now supplied for development, using the official Docker image, its own PostgreSQL database/filestore volumes, strong generated per-lab credentials and loopback-only access on port 8069. It does not require an API key to start, does not touch Traccar or customer Odoo.sh, and is **not** an Enterprise/payroll/financial certification environment.
+
+```bash
+bash ops/odoo_lab.sh start
+# Configure a new test database at http://localhost:8069
+bash ops/odoo_lab.sh stop  # preserves the lab's database and filestore
+```
+
+See [self-hosted Odoo 19 lab](docs/20-odoo-self-hosted-lab.md). For licensed Enterprise-only models, use a separately authorized Odoo.sh or Enterprise environment.
+
 ## Odoo enterprise state bridge — opt-in, no API key in source
 
 Rally now includes a **real, source-agnostic Odoo JSON-2 read-only state bridge** for 11 selected Odoo model types across CRM, sales, procurement, inventory, workforce, payroll, expenses, accounting and payments. A tenant admin must authorize an active Odoo connector credential per company+model; a customer-reviewed Odoo query selector is mandatory per model. Records store only source record IDs, company, state and source timestamps, with a durable history of state transitions—**not names, payroll amounts, invoice totals, bank/payment credentials or personal data fields**. The interface shows authorized state counts through `Integrations → Enterprise ERP state mirror` after explicit admin click.
