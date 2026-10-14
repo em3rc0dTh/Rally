@@ -87,28 +87,23 @@ ODOO_ENTERPRISE_SELECTORS_JSON={"purchase.order":[["state","in",["purchase","don
 
 ## 4. Activate the optional importer when source and grants are ready
 
-```bash
-docker compose -f compose.yaml -f compose.odoo-lab.yaml -f compose.odoo-enterprise.yaml \
-  --profile odoo-lab --profile odoo-enterprise \
-  up -d --build odoo-enterprise-sync
-
-docker compose -f compose.yaml -f compose.odoo-lab.yaml -f compose.odoo-enterprise.yaml \
-  --profile odoo-lab --profile odoo-enterprise \
-  logs --tail=35 odoo-enterprise-sync
-```
-
-**Important:** Compose may need to load `.env.odoo-lab` for the optional lab overlay. The reliable invocation is:
+Because this laboratory stores its PostgreSQL secret outside Rally's default `.env`, Docker Compose needs to load **both** local environment files. After the local Odoo database, API key, Odoo company ID and Rally grant are configured:
 
 ```bash
 docker compose --env-file .env --env-file .env.odoo-lab \
   -f compose.yaml -f compose.odoo-lab.yaml -f compose.odoo-enterprise.yaml \
   --profile odoo-lab --profile odoo-enterprise \
   up -d --build odoo-enterprise-sync
+
+docker compose --env-file .env --env-file .env.odoo-lab \
+  -f compose.yaml -f compose.odoo-lab.yaml -f compose.odoo-enterprise.yaml \
+  --profile odoo-lab --profile odoo-enterprise \
+  logs --tail=35 odoo-enterprise-sync
 ```
 
-Use the same prefix for logs when using the lab overlay. The Odoo connector is opt-in: Rally and Traccar work without it. If you connect to Odoo.sh instead, use `compose.odoo-enterprise.yaml` alone and use `ODOO_URL=https://...`.
+The connector only starts when explicitly selected, not when the Odoo lab starts. `RALLY_ALLOW_INTERNAL_HTTP=1` is already set in the optional connector Compose, and is **only appropriate for the isolated trusted Docker network**.
 
-The importer only sends a verified model ID, company, source state and modification time. Odoo administrator/password, purchase amounts, personal identities and payment details are **never mirrored**.
+For Odoo.sh, omit `compose.odoo-lab.yaml` and `.env.odoo-lab`, and use `ODOO_URL=https://...` against an approved Odoo 19 system with external API entitlements and least-privilege access.
 
 ## 5. Stop without deleting anything
 

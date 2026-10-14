@@ -72,15 +72,14 @@ jobs:
       - name: Validate isolated self-hosted Odoo Community lab
         env:
           RALLY_ADMIN_KEY: "integration-only-abcdefghijklmnopqrstuv1234567890"
-          ODOO_LAB_DB_PASSWORD: "ci-only-odoo-lab-secret"
         run: |
           cp .env.example .env
-          mkdir -p .local/odoo-lab
-          printf '[options]\\nadmin_passwd = random-ci-only\\ndbfilter = ^rally_odoo_lab$\\n' > .local/odoo-lab/odoo.conf
-          docker compose -f compose.yaml -f compose.odoo-lab.yaml --profile odoo-lab config --quiet
-          docker compose -f compose.yaml -f compose.odoo-lab.yaml --profile odoo-lab config --format json > /tmp/rally-odoo-lab.json
-          python -c "import json; s=json.load(open('/tmp/rally-odoo-lab.json'))['services']; assert s['odoo-lab']['ports'][0]['host_ip']=='127.0.0.1'; assert 'ports' not in s['odoo-lab-db']; assert s['odoo-lab']['image'].startswith('odoo:19.0'); assert s['odoo-lab-db']['image'].startswith('postgres:16'); print('Odoo local lab overlay verified')"
           bash -n ops/odoo_lab.sh
+          bash ops/odoo_lab.sh init
+          docker compose --env-file .env --env-file .env.odoo-lab -f compose.yaml -f compose.odoo-lab.yaml --profile odoo-lab config --quiet
+          docker compose --env-file .env --env-file .env.odoo-lab -f compose.yaml -f compose.odoo-lab.yaml --profile odoo-lab config --format json > /tmp/rally-odoo-lab.json
+          python -c "import json; from pathlib import Path; s=json.load(open('/tmp/rally-odoo-lab.json'))['services']; assert s['odoo-lab']['ports'][0]['host_ip']=='127.0.0.1'; assert 'ports' not in s['odoo-lab-db']; assert s['odoo-lab']['image'].startswith('odoo:19.0'); assert s['odoo-lab-db']['image'].startswith('postgres:16'); conf=Path('.local/odoo-lab/odoo.conf').read_text(); assert 'dbfilter = ^rally_odoo_lab$' in conf; assert 'admin_passwd = ' in conf and 'admin_passwd = admin' not in conf; print('Isolated lab setup, credentials and Compose verified')"
+          test "$(stat -c %a .env.odoo-lab)" = "600"
           rm -f .env /tmp/rally-odoo-lab.json
 
       - name: Build application container
